@@ -1,0 +1,165 @@
+<Window x:Class="WindowsHarness.Host.Overlay.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Harness"
+        Width="520" SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        WindowStartupLocation="Manual">
+    <Window.Resources>
+        <!-- Vector icon button for the pill (variant A mocks:
+         docs/design-mocks/pill-mocks.html). Content is the icon geometry
+         string, drawn stroke-only. -->
+        <Style x:Key="PillIconButton" TargetType="Button">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFC9C9CE"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                CornerRadius="10">
+                            <Path Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" Stretch="None"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#33FFFFFF"/>
+                                <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PillButton" TargetType="Button">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Background" Value="#33FFFFFF"/>
+            <Setter Property="Foreground" Value="#FFDDDDDD"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <!-- Prompt mode: initial capture-then-prompt surface -->
+        <Border x:Name="PromptPanel" Background="#F2222222" CornerRadius="8" Padding="12"
+                BorderBrush="#44444444" BorderThickness="1">
+            <StackPanel>
+                <TextBlock x:Name="TargetLabel" Foreground="#FF9E9E9E" FontSize="11"
+                           Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
+                <TextBox x:Name="PromptBox" FontSize="15" Padding="6"
+                         Background="#FF111111" Foreground="#FFEAEAEA"
+                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
+                         KeyDown="OnPromptKeyDown"/>
+                <TextBlock Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
+                           Text="Enter: submit&#160;&#160;&#160;Esc: cancel"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Pill mode: tiny live-status surface after submit.
+             Variant A "Pulse Dot" (docs/design-mocks/pill-mocks.html):
+             pulsing status dot (cyan working/thinking / violet tool / green done /
+             red failed-canceled), indeterminate bottom hairline,
+             hover-revealed vector controls. Never takes focus. -->
+        <Border x:Name="PillPanel" Visibility="Collapsed" Margin="12,4,12,12"
+                Background="#E61E1E20" Height="30" CornerRadius="15"
+                BorderBrush="#17FFFFFF" BorderThickness="1"
+                MouseEnter="OnPillMouseEnter" MouseLeave="OnPillMouseLeave">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="5" Direction="270"
+                                  Opacity="0.45" Color="Black"/>
+            </Border.Effect>
+            <!-- PillContent is measured directly for window sizing: the
+                 DropShadowEffect on the Border adds blur padding to the
+                 Border's desired size, which used to inflate the window and
+                 leave a large gap right of the buttons. -->
+            <Grid x:Name="PillContent" Height="30">
+                <!-- 1 px inner top highlight; radius 14 = capsule of the
+                     28 px inner area (1 px border inset on each side) -->
+                <Border Margin="1" CornerRadius="14"
+                        BorderThickness="0,1,0,0" BorderBrush="#0FFFFFFF"/>
+                <!-- Single horizontal stack: dot, label, timer, then the
+                     hover-revealed controls. The window is sized to this
+                     stack's desired width (ResizeToContent), so buttons flow
+                     right after the timer without overlapping it and without
+                     a trailing gap. -->
+                <StackPanel Orientation="Horizontal" Margin="13,0,8,3"
+                            VerticalAlignment="Center">
+                    <Grid Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Ellipse x:Name="PulseHalo" Width="9" Height="9" Opacity="0.55"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse x:Name="StatusDot" Width="8" Height="8"/>
+                    </Grid>
+                    <TextBlock x:Name="ActivityLabel" Foreground="#FFEAEAEA" FontSize="11.5"
+                               VerticalAlignment="Center" MaxWidth="150"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="ElapsedTimeLabel" Foreground="#FF9A9AA0" FontSize="10"
+                               VerticalAlignment="Center" Margin="8,1,0,0"
+                               Visibility="Collapsed"/>
+                    <StackPanel x:Name="PillButtons" Orientation="Horizontal"
+                                Opacity="0" IsHitTestVisible="False" Background="Transparent">
+                        <Button x:Name="DismissButton" Style="{StaticResource PillIconButton}"
+                                Content="M1.5,6.5 H8.5" ToolTip="Hide; result arrives as a notification"
+                                Click="OnDismissClick"/>
+                        <Button x:Name="CancelButton" Style="{StaticResource PillIconButton}"
+                                Content="M2.5,2.5 L7.5,7.5 M7.5,2.5 L2.5,7.5"
+                                ToolTip="Cancel this invocation"
+                                Click="OnCancelClick"/>
+                    </StackPanel>
+                </StackPanel>
+                <!-- Indeterminate activity hairline along the bottom edge -->
+                <Grid x:Name="HairlineTrack" Height="2" Margin="12,0,12,4"
+                      VerticalAlignment="Bottom" ClipToBounds="True">
+                    <Rectangle x:Name="HairlineSweep" Width="52" HorizontalAlignment="Left"
+                               RadiusX="1" RadiusY="1">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform x:Name="HairlineX"/>
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Reader mode: final answer / failure report -->
+        <Border x:Name="ReaderPanel" Visibility="Collapsed" Background="#F2222222" CornerRadius="8"
+                Padding="12" BorderBrush="#44444444" BorderThickness="1">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <Button x:Name="ReaderCloseButton" DockPanel.Dock="Right"
+                            Style="{StaticResource PillButton}" Content="✕"
+                            ToolTip="Close" Click="OnReaderCloseClick"/>
+                    <TextBlock x:Name="ReaderTitle" Foreground="#FF9E9E9E" FontSize="11"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+                <TextBox x:Name="AnswerBox" IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" MaxHeight="340"
+                         FontSize="13" Padding="6"
+                         Background="#FF111111" Foreground="#FFEAEAEA"
+                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
+                         KeyDown="OnReaderKeyDown"/>
+                <TextBlock x:Name="ReaderHint" Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
+                           Text="copied to clipboard &#183; click the window, then Esc or click away to close"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

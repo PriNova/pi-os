@@ -1,0 +1,11 @@
+<Application x:Class="WindowsHarness.Host.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:WindowsHarness.Host"
+             ShutdownMode="OnExplicitShutdown">
+    <!-- No StartupUri: the host runs hidden in the background.
+         The prompt overlay window is created on hotkey (step 1.6). -->
+    <Application.Resources>
+
+    </Application.Resources>
+</Application>

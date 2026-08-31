@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">pi-os pulse dot</title>
+  <desc id="desc">A cyan inner dot surrounded by a cyan pulse ring.</desc>
+  <defs>
+    <filter id="cyanGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+  <g fill="none" stroke="#4CC2FF" filter="url(#cyanGlow)" opacity="0.8">
+    <circle cx="128" cy="128" r="88" stroke-width="20"/>
+    <circle cx="128" cy="128" r="40" fill="#4CC2FF" stroke="none"/>
+  </g>
+  <g opacity="0.35">
+    <circle cx="128" cy="128" r="88" fill="none" stroke="#4CC2FF" stroke-width="20"/>
+    <circle cx="128" cy="128" r="40" fill="#4CC2FF"/>
+  </g>
+</svg>

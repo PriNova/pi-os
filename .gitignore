@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+TestResults/
+
+# Node / TypeScript
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+*.usersecrets.xml
+
+# Private project documentation — kept locally, intentionally not committed
+/docs/
+
+# Logs & temp
+logs/
+*.log
+tmp/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

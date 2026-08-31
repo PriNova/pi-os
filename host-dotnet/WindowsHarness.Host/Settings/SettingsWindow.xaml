@@ -1,0 +1,44 @@
+<Window x:Class="WindowsHarness.Host.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="pi-os settings"
+        Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Background="#FF1E1E22">
+    <StackPanel Margin="16">
+        <TextBlock Text="Agent model" Foreground="#FF9E9E9E" FontSize="11" Margin="0,0,0,4"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <ComboBox x:Name="ProviderBox" Width="150" Padding="6"
+                      SelectionChanged="OnProviderChanged"/>
+            <TextBlock Text="/" Foreground="#FF555555" FontSize="14"
+                       VerticalAlignment="Center" Margin="6,0"/>
+            <ComboBox x:Name="ModelBox" Width="240" Padding="6"
+                      DisplayMemberPath="Name"
+                      SelectionChanged="OnModelChanged">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="ToolTip" Value="{Binding Id}"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+            </ComboBox>
+        </StackPanel>
+
+        <TextBlock Text="Reasoning effort" Foreground="#FF9E9E9E" FontSize="11" Margin="0,0,0,4"/>
+        <ComboBox x:Name="EffortBox" Width="180" HorizontalAlignment="Left" Padding="6"
+                  Margin="0,0,0,8"/>
+
+        <TextBlock Foreground="#FF707070" FontSize="10.5" Margin="1,0,0,12"
+                   Text="Applies from the next hotkey invocation onward; a running task keeps its model."/>
+        <TextBlock x:Name="StatusText" Foreground="#FF707070" FontSize="11"
+                   Margin="1,0,0,12" TextWrapping="Wrap"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="SaveButton" Content="Save" Width="80" Margin="0,0,8,0"
+                    Padding="6,3" IsDefault="True" Click="OnSaveClick"/>
+            <Button Content="Cancel" Width="80" Padding="6,3" IsCancel="True" Click="OnCancelClick"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

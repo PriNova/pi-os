@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="WindowsHarness.Contracts/WindowsHarness.Contracts.csproj" />
+  <Project Path="WindowsHarness.Host.Tests/WindowsHarness.Host.Tests.csproj" />
+  <Project Path="WindowsHarness.Host/WindowsHarness.Host.csproj" />
+</Solution>

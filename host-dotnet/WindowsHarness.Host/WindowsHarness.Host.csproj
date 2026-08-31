@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\ApplicationIcon.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- TrayService is the only WinForms consumer; keep its types out of
+       every other file so WPF's Application/KeyEventArgs/Timer stay unambiguous. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- O.3: ship the built node harness beside the exe so the installed
+       layout works exe-adjacent. Run 'npm run build' in node-harness first;
+       if dist is absent the glob matches nothing and the supervisor falls
+       back to the dev walk-up search. -->
+  <ItemGroup>
+    <Content Include="..\..\node-harness\dist\**\*"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="node-harness\dist\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Manifests so 'npm ci' with production deps can provision runtime
+         packages inside the installed layout (dist alone cannot resolve
+         imports). -->
+    <Content Include="..\..\node-harness\package.json;..\..\node-harness\package-lock.json"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="node-harness\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WindowsHarness.Contracts\WindowsHarness.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.321">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
