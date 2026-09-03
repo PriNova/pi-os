@@ -88,9 +88,13 @@ public sealed class ComputerUseService(ContextStore store, WindowInfoService win
             for (var i = 0; i < text.Length; i++)
             {
                 token.ThrowIfCancellationRequested();
-                SendUnicodeKeystroke(text[i]);
+                SendTextCharacter(text[i]);
                 if (i < text.Length - 1)
                 {
+                    if (text[i] == '\r' && text[i + 1] == '\n')
+                    {
+                        i++; // CRLF is one line break, not two.
+                    }
                     await Task.Delay(TypeInterval, token);
                 }
             }
@@ -317,6 +321,19 @@ public sealed class ComputerUseService(ContextStore store, WindowInfoService win
 
     private static void SendUnicode(char character, bool keyUp) => SendKeyboard(0, character,
         KEYBD_EVENT_FLAGS.KEYEVENTF_UNICODE | (keyUp ? KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP : 0));
+
+    /// <summary>Injects one character of TypeText text. Newlines cannot travel as
+    /// Unicode characters (editor pipelines drop/ignore a bare LF), so CR/LF/CRLF
+    /// become a real Enter key press, which every editor honors.</summary>
+    private static void SendTextCharacter(char character)
+    {
+        if (character is '\n' or '\r')
+        {
+            PressAndRelease(0x0D); // VK_RETURN
+            return;
+        }
+        SendUnicodeKeystroke(character);
+    }
 
     /// <summary>One Unicode keystroke as a single atomic Windows call.
     /// Down and up travel in the same SendInput batch, so a late key-up can

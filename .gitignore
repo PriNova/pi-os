@@ -20,7 +20,9 @@ npm-debug.log*
 *.usersecrets.xml
 
 # Private project documentation — kept locally, intentionally not committed
-/docs/
+# Exception: the input-semantics contract is public and must reach fork developers.
+/docs/*
+!/docs/desktop-input-semantics.md
 
 # Logs & temp
 logs/

@@ -28,6 +28,16 @@ explicitly tell the user the installed copy is now stale. Never assume a
 freshly built `bin/Debug` or repo state is what runs when the user presses
 the hotkey.
 
+## Desktop input invariants (read before touching the input path)
+
+`docs/desktop-input-semantics.md` (tracked) is the binding contract for typed
+text input: characters must arrive exactly as sent, `\n` must become a real
+line break, keystrokes are paced (default 20 ms/char, `PI_OS_TYPE_INTERVAL_MS`),
+and down/up travel atomically. Several of these were learned only through live
+defects, so read that document and re-run its verification whenever you change
+`ComputerUseService` or add a new platform host. Invariants are host-neutral;
+mechanisms are Windows-specific — never push them into the shared node layer.
+
 ## Progress tracker commits
 
 Do not create separate commits for `docs/progress-tracker.md` status updates.
