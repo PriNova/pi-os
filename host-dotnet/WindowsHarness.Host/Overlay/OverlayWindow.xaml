@@ -164,7 +164,7 @@
                 <TextBlock x:Name="FollowupHint" Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
                            Text="Enter: follow-up &#183; Esc: close"/>
                 <TextBlock x:Name="ReaderHint" Foreground="#FF707070" FontSize="10.5" Margin="2,2,0,0"
-                           Text="copied to clipboard &#183; click the window, then Esc or click away to close"/>
+                           Text="copied to clipboard &#183; Esc or &#10005; to close"/>
             </StackPanel>
         </Border>
     </Grid>

@@ -128,7 +128,6 @@ public partial class OverlayWindow : Window
         Closing += (_, _) =>
         {
             _closeRequested = true;
-            Deactivated -= OnReaderDeactivated;
         };
         Closed += (_, _) =>
         {
@@ -280,7 +279,7 @@ public partial class OverlayWindow : Window
     /// <summary>Expand into the reader popup reporting a failure.</summary>
     public void ShowFailure(string message)
     {
-        ReaderHint.Text = "click the window, then Esc or click away to close";
+        ReaderHint.Text = "copied to clipboard · Esc or ✕ to close";
         if (!_pillMode)
         {
             SwitchToReader("pi-os — failed", message);
@@ -358,12 +357,10 @@ public partial class OverlayWindow : Window
 
 
     /// <summary>Shrink back to the pill for a follow-up run.
-    /// The agent focuses the target window mid-run; staying in reader mode
-    /// would deactivate this window and auto-close it (killing the session).
-    /// The pill never takes focus, so it survives focus changes.</summary>
+    /// The pill never takes focus, so agent focus changes never disturb it.
+    /// The reader itself stays open until the user closes it explicitly.</summary>
     public void EnterFollowupPill()
     {
-        Deactivated -= OnReaderDeactivated;
         _followupWorking = true;
         FollowupBox.IsEnabled = false;
         _pillMode = true;
@@ -445,9 +442,6 @@ public partial class OverlayWindow : Window
 
         UpdateLayout();
         ApplyPhysicalPosition();
-
-        Deactivated -= OnReaderDeactivated;
-        Deactivated += OnReaderDeactivated;
     }
 
     // ------------------------------------------------------------------
@@ -529,8 +523,6 @@ public partial class OverlayWindow : Window
         }
     }
 
-    private void OnReaderDeactivated(object? sender, EventArgs e) => CloseOnce();
-
     private void CloseOnce()
     {
         if (_closeRequested)
@@ -539,7 +531,6 @@ public partial class OverlayWindow : Window
         }
 
         _closeRequested = true;
-        Deactivated -= OnReaderDeactivated;
         Close();
     }
 
