@@ -1,5 +1,9 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { CreateAgentSessionOptions, InlineExtension } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentSession,
+  CreateAgentSessionOptions,
+  InlineExtension,
+} from "@earendil-works/pi-coding-agent";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -13,14 +17,24 @@ import { loadScreenshotImage } from "./screenshotImage.js";
 import { resolveModel } from "./modelCatalog.js";
 
 /**
- * Runs one desktop invocation through a pi agent session.
+ * Live pi sessions for sequential follow-ups.
  *
- * Session choices:
- * - Session per invocation (in-memory): desktop tasks are independent; no
- *   stale history from earlier invocations.
- * - Pi's standard agent directory supplies the user's global extensions,
- *   skills, settings, models, and authentication alongside Computer Use.
+ * KISS: one live session per invocation id. The first prompt creates it
+ * (with the pinned context summary + screenshot). Follow-up prompts reuse
+ * the same session object so the agent keeps history. The session is
+ * disposed only when the reader window closes.
+ *
+ * Pi's standard agent directory supplies the user's global extensions,
+ * skills, settings, models, and authentication alongside Computer Use.
+ * Compaction stays inside pi; pi-os keeps the thread's original model.
  */
+
+export interface LiveAgentSession {
+  session: AgentSession;
+  contextId: string;
+  /** Per-prompt capture; set before each prompt(), read after it resolves. */
+  capture: { responseText: string; toolCalls: number; providerError?: string } | null;
+}
 
 /** Model + reasoning effort chosen in the settings page (modelSettings.ts). */
 export interface ModelSelectionOption {
@@ -44,6 +58,16 @@ export interface AgentRunOptions {
   onToolCall?: (toolName: string) => void;
   /** Live activity marker for the host pill: tool name while a tool runs,
    * "thinking" during reasoning, undefined when idle. */
+  onActivity?: (activity: string | undefined) => void;
+}
+
+export interface LiveSessionCreateOptions {
+  hostClient: HostClient;
+  contextId: string;
+  capturesDir: string;
+  log: (line: string) => void;
+  modelSelection?: ModelSelectionOption | null;
+  onToolCall?: (toolName: string) => void;
   onActivity?: (activity: string | undefined) => void;
 }
 
@@ -125,15 +149,15 @@ export async function loadAgentResources(
   return loader;
 }
 
-export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult> {
-  const { hostClient, contextId, prompt, snapshot, capturesDir, log, signal, onToolCall, onActivity } = options;
+/** Create a live session without prompting. The caller owns dispose(). */
+export async function createLiveSession(options: LiveSessionCreateOptions): Promise<LiveAgentSession> {
+  const { hostClient, contextId, capturesDir, log, onToolCall, onActivity } = options;
 
   const extension = createComputerUseExtension(contextId, hostClient, capturesDir);
   const loader = await loadAgentResources(extension);
 
   const modelRuntime = await ModelRuntime.create();
 
-  // Settings-page selection (if any) -> concrete model for THIS invocation.
   const resolved = resolveModel(modelRuntime, options.modelSelection);
   if (resolved.fallbackReason) {
     log(`[agent] ${resolved.fallbackReason}; using pi's automatic default`);
@@ -147,7 +171,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
   if (resolved.model) {
     sessionOptions.model = resolved.model;
     if (options.modelSelection?.thinkingLevel) {
-      // The SDK clamps unsupported levels to model capabilities.
       sessionOptions.thinkingLevel = options.modelSelection.thinkingLevel as CreateAgentSessionOptions["thinkingLevel"];
     }
   }
@@ -158,12 +181,13 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
     ` effort=${session.thinkingLevel}`,
   );
 
-  let responseText = "";
-  let toolCalls = 0;
-  let providerError: string | undefined;
+  const live: LiveAgentSession = { session, contextId, capture: null };
   session.subscribe((event) => {
+    const capture = live.capture;
     if (event.type === "tool_execution_start") {
-      toolCalls += 1;
+      if (capture) {
+        capture.toolCalls += 1;
+      }
       log(`[agent] tool -> ${event.toolName}`);
       onToolCall?.(event.toolName);
       onActivity?.(event.toolName);
@@ -174,27 +198,53 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
       if (kind === "thinking_delta") {
         onActivity?.("thinking");
       } else if (kind === "text_delta") {
-        // Narration started: thinking is over.
         onActivity?.(undefined);
       }
-    } else if (event.type === "message_end" && event.message.role === "assistant") {
-      // Keep only the most recently completed assistant message. Earlier
-      // messages can be narration before tool calls, not the final answer.
-      responseText = assistantMessageText(event.message);
-
-      // Provider/model failures arrive as a synthetic assistant message
-      // (stopReason "error"); prompt() still resolves normally.
+    } else if (event.type === "message_end" && event.message.role === "assistant" && capture) {
+      capture.responseText = assistantMessageText(event.message);
       if (event.message.stopReason === "error" && event.message.errorMessage) {
-        providerError = event.message.errorMessage;
-        log(`[agent] provider error: ${providerError}`);
+        capture.providerError = event.message.errorMessage;
+        log(`[agent] provider error: ${capture.providerError}`);
       }
     }
   });
 
+  return live;
+}
+
+function wireAbort(session: AgentSession, signal?: AbortSignal): void {
   if (signal) {
-    // The SDK has no signal input for prompt(); it exposes abort() instead.
     signal.addEventListener("abort", () => void session.abort(), { once: true });
   }
+}
+
+function throwIfAbortedOrFailed(
+  live: LiveAgentSession,
+  signal?: AbortSignal,
+): { responseText: string; toolCalls: number } {
+  const capture = live.capture;
+  if (signal?.aborted) {
+    throw abortError(signal);
+  }
+  if (capture?.providerError !== undefined) {
+    throw new Error(capture.providerError);
+  }
+  return {
+    responseText: (capture?.responseText ?? "").trim(),
+    toolCalls: capture?.toolCalls ?? 0,
+  };
+}
+
+/** First prompt on a live session: pinned context summary + screenshot. */
+export async function promptFirst(
+  live: LiveAgentSession,
+  snapshot: DesktopContextSnapshot & { screenshot?: ScreenshotRef | null },
+  prompt: string,
+  capturesDir: string,
+  signal?: AbortSignal,
+): Promise<AgentRunResult> {
+  live.capture = { responseText: "", toolCalls: 0 };
+  wireAbort(live.session, signal);
 
   const userMessage = [
     "## Pinned desktop context (captured before you were invoked)",
@@ -204,25 +254,46 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
     prompt,
   ].join("\n");
 
+  const image = snapshot.screenshot?.filePath
+    ? await loadScreenshotImage(snapshot.screenshot.filePath, capturesDir).catch(() => null)
+    : null;
+  await live.session.prompt(userMessage, image ? { images: [image] } : undefined);
+  return throwIfAbortedOrFailed(live, signal);
+}
+
+/** Follow-up prompt on an idle live session: plain text, history is kept by pi. */
+export async function promptFollowup(
+  live: LiveAgentSession,
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<AgentRunResult> {
+  live.capture = { responseText: "", toolCalls: 0 };
+  wireAbort(live.session, signal);
+  await live.session.prompt(prompt);
+  return throwIfAbortedOrFailed(live, signal);
+}
+
+/** One-shot helper (first prompt + dispose). Kept for slice tests callers. */
+export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult> {
+  const { hostClient, contextId, prompt, snapshot, capturesDir, log, signal, onToolCall, onActivity } = options;
+  const live = await createLiveSession({
+    hostClient,
+    contextId,
+    capturesDir,
+    log,
+    modelSelection: options.modelSelection,
+    onToolCall,
+    onActivity,
+  });
   try {
-    const image = snapshot.screenshot?.filePath
-      ? await loadScreenshotImage(snapshot.screenshot.filePath, capturesDir).catch(() => null)
-      : null;
-    await session.prompt(userMessage, image ? { images: [image] } : undefined);
+    return await promptFirst(live, snapshot, prompt, capturesDir, signal);
   } finally {
-    session.dispose();
+    try {
+      live.session.dispose();
+    } catch {
+      // Best-effort.
+    }
   }
-
-  if (signal?.aborted) {
-    throw abortError(signal);
-  }
-
-  if (providerError !== undefined) {
-    // Fail the invocation with the real reason instead of completing empty.
-    throw new Error(providerError);
-  }
-
-  return { responseText: responseText.trim(), toolCalls };
 }
 
 /** Normalize an aborted signal into a classifiable error. */

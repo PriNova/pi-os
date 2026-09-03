@@ -92,6 +92,26 @@ export class InvocationStore {
     });
   }
 
+  /** Requeue a terminal record for a sequential follow-up on the same session.
+   *  Returns false when unknown or still running. Keeps steps history. */
+  requeueForFollowup(id: string, prompt: string): boolean {
+    const record = this.records.get(id);
+    if (!record) {
+      return false;
+    }
+    if (record.state === "queued" || record.state === "running") {
+      return false;
+    }
+    record.prompt = prompt;
+    record.state = "running";
+    record.startedAt = new Date().toISOString();
+    record.finishedAt = null;
+    delete record.activity;
+    delete record.responseText;
+    delete record.failureMessage;
+    return true;
+  }
+
   /** Persist the final answer, capped so records stay small. */
   setResponse(id: string, text: string): void {
     this.mutate(id, (r) => {

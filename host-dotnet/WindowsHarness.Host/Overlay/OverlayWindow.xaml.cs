@@ -91,11 +91,17 @@ public partial class OverlayWindow : Window
     /// <summary>Raised once when the user submits a non-empty prompt.</summary>
     public event Action<string>? PromptSubmitted;
 
+    /// <summary>Raised each time the user submits a non-empty follow-up in reader mode.</summary>
+    public event Action<string>? FollowupSubmitted;
+
     /// <summary>Raised when the user presses the pill ✕ (cancel invocation).</summary>
     public event Action? CancelRequested;
 
     /// <summary>Raised when the user presses the pill _ (dismiss; result arrives as a toast).</summary>
     public event Action? DismissRequested;
+
+    /// <summary>True while a follow-up is in flight; blocks double-submit.</summary>
+    private bool _followupWorking;
 
     private OverlayWindow(Contracts.DesktopContextSnapshot snapshot)
     {
@@ -259,11 +265,16 @@ public partial class OverlayWindow : Window
         if (!_pillMode)
         {
             SwitchToReader("pi-os", text);
+            EnableFollowup();
             return;
         }
 
         BeginTerminal("done", PillState.Done);
-        BeginTerminalFlash(() => SwitchToReader("pi-os", text));
+        BeginTerminalFlash(() =>
+        {
+            SwitchToReader("pi-os", text);
+            EnableFollowup();
+        });
     }
 
     /// <summary>Expand into the reader popup reporting a failure.</summary>
@@ -273,11 +284,47 @@ public partial class OverlayWindow : Window
         if (!_pillMode)
         {
             SwitchToReader("pi-os — failed", message);
+            DisableFollowup("follow-up unavailable after failure");
             return;
         }
 
         BeginTerminal("failed", PillState.Failed);
-        BeginTerminalFlash(() => SwitchToReader("pi-os — failed", message));
+        BeginTerminalFlash(() =>
+        {
+            SwitchToReader("pi-os — failed", message);
+            DisableFollowup("follow-up unavailable after failure");
+        });
+    }
+
+    /// <summary>Follow-up box becomes usable once an answer is shown.</summary>
+    public void EnableFollowup()
+    {
+        _followupWorking = false;
+        FollowupBox.Text = string.Empty;
+        FollowupBox.IsEnabled = true;
+        FollowupHint.Text = "Enter: follow-up · Esc: close";
+    }
+
+    /// <summary>Follow-up box shows a busy hint and blocks double-submit.</summary>
+    public void SetFollowupWorking(bool working, string? hint = null)
+    {
+        _followupWorking = working;
+        FollowupBox.IsEnabled = !working;
+        if (hint is not null)
+        {
+            FollowupHint.Text = hint;
+        }
+        else if (working)
+        {
+            FollowupHint.Text = "working…";
+        }
+    }
+
+    private void DisableFollowup(string hint)
+    {
+        _followupWorking = false;
+        FollowupBox.IsEnabled = false;
+        FollowupHint.Text = hint;
     }
 
     /// <summary>Freezes the pill into a colored one-word status: live motion
@@ -309,6 +356,48 @@ public partial class OverlayWindow : Window
         action?.Invoke();
     }
 
+
+    /// <summary>Shrink back to the pill for a follow-up run.
+    /// The agent focuses the target window mid-run; staying in reader mode
+    /// would deactivate this window and auto-close it (killing the session).
+    /// The pill never takes focus, so it survives focus changes.</summary>
+    public void EnterFollowupPill()
+    {
+        Deactivated -= OnReaderDeactivated;
+        _followupWorking = true;
+        FollowupBox.IsEnabled = false;
+        _pillMode = true;
+        _terminal = false;
+        _canceled = false;
+        _mergedActivities.Clear();
+        StopClearTimer();
+        PromptPanel.Visibility = Visibility.Collapsed;
+        ReaderPanel.Visibility = Visibility.Collapsed;
+        PillPanel.Visibility = Visibility.Visible;
+        DismissButton.IsEnabled = true;
+        CancelButton.IsEnabled = true;
+        SetNoActivate(true);
+        ShowActivated = false;
+        _pillStartedAt = DateTime.UtcNow;
+        ActivityLabel.Text = "working…";
+        ElapsedTimeLabel.Text = "0:00";
+        ElapsedTimeLabel.Visibility = Visibility.Visible;
+        StartElapsedTimer();
+        ResizeToContent();
+        SetPillState(PillState.Working);
+    }
+
+    private string _lastReaderTitle = "pi-os";
+    private string _lastReaderText = string.Empty;
+
+    /// <summary>Back to the reader with the previous answer after a failed
+    /// follow-up, so the user can retry. The answer box is untouched.</summary>
+    public void ReenterReaderAfterFailedFollowup(string hint)
+    {
+        SwitchToReader(_lastReaderTitle, _lastReaderText);
+        EnableFollowup();
+        FollowupHint.Text = hint;
+    }
 
     /// <summary>Toast-click path after dismissal: resurface the reader popup
     /// (the window was hidden, never closed, so its state is intact).</summary>
@@ -351,10 +440,13 @@ public partial class OverlayWindow : Window
         ReaderTitle.Text = title;
         AnswerBox.Text = text;
         AnswerBox.SelectAll();
+        _lastReaderTitle = title;
+        _lastReaderText = text;
 
         UpdateLayout();
         ApplyPhysicalPosition();
 
+        Deactivated -= OnReaderDeactivated;
         Deactivated += OnReaderDeactivated;
     }
 
@@ -407,6 +499,30 @@ public partial class OverlayWindow : Window
     private void OnReaderKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CloseOnce();
+        }
+    }
+
+    private void OnFollowupKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            if (_followupWorking || !FollowupBox.IsEnabled)
+            {
+                return;
+            }
+            var text = FollowupBox.Text.Trim();
+            if (text.Length == 0)
+            {
+                return; // Ignore empty submissions; keep the reader open.
+            }
+            e.Handled = true;
+            SetFollowupWorking(true);
+            FollowupSubmitted?.Invoke(text);
+        }
+        else if (e.Key == Key.Escape)
         {
             e.Handled = true;
             CloseOnce();

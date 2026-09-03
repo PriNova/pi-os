@@ -262,6 +262,30 @@ Each invocation also has a wall-clock timeout (`PI_OS_INVOKE_TIMEOUT_MS`,
 default 300000, `0` disables). A timed-out invocation ends in state
 `timed_out`; both terminal paths record a `cancel` / `timeout` step.
 
+#### `POST /invocations/{invocationId}/followup`
+
+Sequential prompt on the idle live session (same reader window). KISS:
+plain text only; history is kept by pi, no new screenshot is attached.
+Tools re-observe via `desktop_capture_window` when fresh pixels are needed.
+The thread keeps its original model.
+
+Request: `{"prompt": "and now sort it"}`.
+
+- `202 {"accepted": true, "invocationId": "..."}` — requeued to
+  `running`; poll `GET /invocations/{id}` for the new answer. Steps append;
+  `responseText` is replaced.
+- `400 {"error":{"code":"invalid_arguments"}}` — missing/empty prompt.
+- `404 {"error":{"code":"not_found"}}` — unknown invocation id.
+- `404 {"error":{"code":"session_closed"}}` — live session is gone
+  (reader closed, harness restarted, or slice-mode first run failed).
+- `409 {"error":{"code":"not_idle"}}` — still `queued`/`running`.
+
+#### `POST /invocations/{invocationId}/close`
+
+Disposes the live session when the reader window closes. Idempotent:
+`200 {"closed": true, "invocationId": "..."}` even when no session
+remains. The host fires this on window close and never blocks on it.
+
 ### Model settings (settings page)
 
 The host tray menu opens a settings page for agent model + reasoning effort.

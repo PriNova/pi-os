@@ -173,6 +173,52 @@ public sealed class NodeInvoker
         return null;
     }
 
+    /// <summary>Submits a sequential follow-up on the idle live session.
+    /// Returns true when accepted (202); false when rejected or unreachable.</summary>
+    public async Task<bool> SendFollowupAsync(string invocationId, string prompt)
+    {
+        var payload = new { prompt };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/invocations/{invocationId}/followup")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload, ContractsJson.Options),
+                Encoding.UTF8, "application/json"),
+        };
+        AddToken(request);
+        try
+        {
+            using var response = await _client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Warn($"Follow-up for {invocationId} rejected: HTTP {(int)response.StatusCode}");
+            }
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Follow-up for {invocationId} failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Disposes the live session (reader closed). Fire-and-forget.</summary>
+    public async Task CloseAsync(string invocationId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/invocations/{invocationId}/close");
+        AddToken(request);
+        try
+        {
+            using var response = await _client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Warn($"Close for {invocationId} rejected: HTTP {(int)response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Close for {invocationId} failed: {ex.Message}");
+        }
+    }
+
     /// <summary>Requests cancellation (pill ✕). Returns true when accepted.</summary>
     public async Task<bool> CancelAsync(string invocationId)
     {

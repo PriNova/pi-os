@@ -152,12 +152,18 @@
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                 </DockPanel>
                 <TextBox x:Name="AnswerBox" IsReadOnly="True" TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" MaxHeight="340"
+                         VerticalScrollBarVisibility="Auto" MaxHeight="300"
                          FontSize="13" Padding="6"
                          Background="#FF111111" Foreground="#FFEAEAEA"
                          BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
                          KeyDown="OnReaderKeyDown"/>
-                <TextBlock x:Name="ReaderHint" Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
+                <TextBox x:Name="FollowupBox" FontSize="13" Padding="6" Margin="0,8,0,0"
+                         Background="#FF111111" Foreground="#FFEAEAEA"
+                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
+                         KeyDown="OnFollowupKeyDown" IsEnabled="False"/>
+                <TextBlock x:Name="FollowupHint" Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
+                           Text="Enter: follow-up &#183; Esc: close"/>
+                <TextBlock x:Name="ReaderHint" Foreground="#FF707070" FontSize="10.5" Margin="2,2,0,0"
                            Text="copied to clipboard &#183; click the window, then Esc or click away to close"/>
             </StackPanel>
         </Border>

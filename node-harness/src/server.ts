@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { loadConfig, type HarnessConfig } from "./config.js";
 import { HostClient, type DesktopContextSnapshot, type ScreenshotRef } from "./hostClient.js";
 import { InvocationStore, type InvocationRecord } from "./invocations.js";
-import { abortError, runAgent } from "./agent/agentRunner.js";
+import { abortError, createLiveSession, promptFirst, promptFollowup } from "./agent/agentRunner.js";
+import { LiveSessionStore } from "./agent/liveSessions.js";
 import { getModelRuntime, listAvailableModels } from "./agent/modelCatalog.js";
 import { AgentModelSettings, type ModelSelection } from "./agent/modelSettings.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -10,8 +11,10 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 /**
  * Node agent harness HTTP surface per shared/protocol/protocol.md:
  * - GET  /health
- * - POST /invoke            (202, async processing)
- * - GET  /invocations/{id}  (execution status)
+ * - POST /invoke                    (202, async processing)
+ * - GET  /invocations/{id}          (execution status)
+ * - POST /invocations/{id}/followup (202, sequential prompt on idle session)
+ * - POST /invocations/{id}/close    (dispose the live session)
  *
  * Bound to loopback only. All non-health routes require X-Harness-Token.
  */
@@ -37,6 +40,8 @@ interface RunningInvocation {
 export class HarnessServer {
   readonly invocations = new InvocationStore();
   private readonly running = new Map<string, RunningInvocation>();
+  /** Live sessions for sequential follow-ups; disposed on reader close. */
+  private readonly liveSessions = new LiveSessionStore();
   private readonly server: Server;
   /** Settings-page model choice applied to every new invocation. */
   private readonly modelSettings = new AgentModelSettings();
@@ -118,6 +123,18 @@ export class HarnessServer {
       const cancelMatch = /^\/invocations\/([\w-]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {
         return this.handleCancel(cancelMatch[1] as string, response);
+      }
+
+      const followupMatch = /^\/invocations\/([\w-]+)\/followup$/.exec(url.pathname);
+      if (request.method === "POST" && followupMatch) {
+        await this.handleFollowup(followupMatch[1] as string, request, response);
+        return;
+      }
+
+      const closeMatch = /^\/invocations\/([\w-]+)\/close$/.exec(url.pathname);
+      if (request.method === "POST" && closeMatch) {
+        this.liveSessions.dispose(closeMatch[1] as string);
+        return this.json(response, 200, { closed: true, invocationId: closeMatch[1] });
       }
 
       this.json(response, 404, { error: { code: "not_found", message: `No route: ${route}` } });
@@ -219,56 +236,134 @@ export class HarnessServer {
     this.json(response, 202, { accepted: true, invocationId: id });
   }
 
-  private async processInvocation(record: InvocationRecord): Promise<void> {
-    // A.3: one AbortController per invocation; timeout fires it when configured.
+  /** POST /invocations/{id}/followup — sequential prompt on the idle live session. */
+  private async handleFollowup(id: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const record = this.invocations.get(id);
+    if (!record) {
+      return void this.json(response, 404, {
+        error: { code: "not_found", message: `Unknown invocation '${id}'` },
+      });
+    }
+    const body = (await this.readJson(request)) as { prompt?: unknown } | null;
+    const prompt = body?.prompt;
+    if (typeof prompt !== "string" || prompt.trim().length === 0) {
+      return void this.json(response, 400, {
+        error: { code: "invalid_arguments", message: "prompt (non-empty string) is required" },
+      });
+    }
+    if (record.state === "queued" || record.state === "running") {
+      return void this.json(response, 409, {
+        error: { code: "not_idle", message: `Invocation '${id}' is not idle` },
+      });
+    }
+    if (this.config.agentEnabled && !this.liveSessions.get(id) && !this.options.onInvocation) {
+      return void this.json(response, 404, {
+        error: { code: "session_closed", message: `Live session for '${id}' is gone` },
+      });
+    }
+    const trimmed = prompt.trim();
+    if (!this.invocations.requeueForFollowup(id, trimmed)) {
+      return void this.json(response, 409, {
+        error: { code: "not_idle", message: `Invocation '${id}' is not idle` },
+      });
+    }
+    console.log(`[invoke] followup id=${id} prompt=${JSON.stringify(trimmed.slice(0, 200))}`);
+    this.json(response, 202, { accepted: true, invocationId: id });
+    void this.processFollowup(record, trimmed);
+  }
+
+  private trackRun(id: string): { signal: AbortSignal; entry: RunningInvocation } {
+    // A.3: one AbortController per run; timeout fires it when configured.
     const entry: RunningInvocation = { controller: new AbortController(), timedOut: false };
     if (this.config.invokeTimeoutMs > 0) {
       entry.timer = setTimeout(() => {
         entry.timedOut = true;
         entry.controller.abort();
-        console.warn(`[invoke] timeout (${this.config.invokeTimeoutMs}ms) id=${record.invocationId}`);
+        console.warn(`[invoke] timeout (${this.config.invokeTimeoutMs}ms) id=${id}`);
       }, this.config.invokeTimeoutMs);
       entry.timer.unref();
     }
-    this.running.set(record.invocationId, entry);
-    const signal = entry.controller.signal;
+    this.running.set(id, entry);
+    return { signal: entry.controller.signal, entry };
+  }
 
+  private endRun(id: string, entry: RunningInvocation): void {
+    if (entry.timer) {
+      clearTimeout(entry.timer);
+    }
+    this.running.delete(id);
+  }
+
+  private finishWithOutcome(id: string, entry: RunningInvocation, error: unknown): void {
+    const signal = entry.controller.signal;
+    const aborted = signal.aborted;
+    const message = error instanceof Error ? error.message : String(error);
+    if (aborted) {
+      console.warn(`[invoke] ${entry.timedOut ? "timed out" : "aborted"}: ${message}`);
+      this.invocations.addStep(id, entry.timedOut ? "timeout" : "cancel", false, message);
+      this.invocations.finish(id, entry.timedOut ? "timed_out" : "aborted", message);
+    } else if (error) {
+      console.error(`[invoke] failed: ${message}`);
+      this.invocations.addStep(id, "process", false, message);
+      this.invocations.finish(id, "failed", message);
+    } else {
+      this.invocations.finish(id, "completed");
+    }
+  }
+
+  private async processInvocation(record: InvocationRecord): Promise<void> {
+    const { signal, entry } = this.trackRun(record.invocationId);
+    let error: unknown = null;
     try {
       this.invocations.start(record.invocationId);
       if (this.options.onInvocation) {
         await this.options.onInvocation(record);
-      }
-      else {
+      } else {
         await this.defaultProcessor(record, signal);
       }
       if (signal.aborted) {
         throw abortError(signal);
       }
-      this.invocations.finish(record.invocationId, "completed");
-    } catch (error) {
-      const aborted = signal.aborted;
-      const message = error instanceof Error ? error.message : String(error);
-      if (aborted) {
-        console.warn(`[invoke] ${entry.timedOut ? "timed out" : "aborted"}: ${message}`);
-        this.invocations.addStep(record.invocationId,
-          entry.timedOut ? "timeout" : "cancel", false, message);
-        this.invocations.finish(record.invocationId, entry.timedOut ? "timed_out" : "aborted", message);
-      } else {
-        console.error(`[invoke] failed: ${message}`);
-        this.invocations.addStep(record.invocationId, "process", false, message);
-        this.invocations.finish(record.invocationId, "failed", message);
-      }
+    } catch (e) {
+      error = e;
     } finally {
-      if (entry.timer) {
-        clearTimeout(entry.timer);
+      // A live session that failed to start is useless; drop it so a
+      // follow-up reports session_closed instead of reusing a broken thread.
+      if (error && this.liveSessions.get(record.invocationId)) {
+        const rec = this.invocations.get(record.invocationId);
+        const neverRan = !rec?.steps.some((s) => s.tool.startsWith("agent."));
+        if (neverRan && !signal.aborted) {
+          this.liveSessions.dispose(record.invocationId);
+        }
       }
-      this.running.delete(record.invocationId);
+      this.finishWithOutcome(record.invocationId, entry, error);
+      this.endRun(record.invocationId, entry);
+    }
+  }
+
+  private async processFollowup(record: InvocationRecord, prompt: string): Promise<void> {
+    const { signal, entry } = this.trackRun(record.invocationId);
+    let error: unknown = null;
+    try {
+      if (this.options.onInvocation) {
+        await this.options.onInvocation(record);
+      } else {
+        await this.followupProcessor(record, prompt, signal);
+      }
+      if (signal.aborted) {
+        throw abortError(signal);
+      }
+    } catch (e) {
+      error = e;
+    } finally {
+      this.finishWithOutcome(record.invocationId, entry, error);
+      this.endRun(record.invocationId, entry);
     }
   }
 
   /**
-   * Slice processor: log the complete request and fetch the pinned context
-   * snapshot. The agent loop and round-trip tool call arrive in 1.9.
+   * First prompt: fetch the pinned snapshot, create the live session,
+   * and keep it for sequential follow-ups until the reader closes.
    */
   private async defaultProcessor(record: InvocationRecord, signal?: AbortSignal): Promise<void> {
     const hostClient = this.options.hostClient;
@@ -299,33 +394,63 @@ export class HarnessServer {
       `target=${target?.processName ?? "?"}`);
 
     if (!this.config.agentEnabled) {
-      // Deterministic slice mode (default): prove the round trip without an LLM.
+      // Deterministic slice mode: prove the round trip without an LLM.
       await this.roundTripCapture(record, record.contextId, signal);
       this.invocations.setResponse(record.invocationId,
         "[slice] round-trip capture ok (PI_OS_AGENT=0)");
       return;
     }
 
-    // Agent mode: hand context + prompt to a real pi session.
-    const result = await runAgent({
+    // Agent mode: create the live session and keep it for follow-ups.
+    // The thread keeps its original model; later settings changes apply
+    // only to new invocations.
+    const live = await createLiveSession({
       hostClient,
       contextId: record.contextId,
-      prompt: record.prompt,
-      snapshot: snapshot as DesktopContextSnapshot & { screenshot?: ScreenshotRef | null },
       capturesDir: this.config.capturesDir,
       log: (line) => console.log(line),
       modelSelection: this.modelSettings.get(),
-      signal,
       onToolCall: (toolName) =>
         this.invocations.addStep(record.invocationId, `agent.${toolName}`, true),
       onActivity: (activity) => this.invocations.setActivity(record.invocationId, activity),
     });
+    this.liveSessions.set(record.invocationId, live);
+    const result = await promptFirst(
+      live,
+      snapshot as DesktopContextSnapshot & { screenshot?: ScreenshotRef | null },
+      record.prompt,
+      this.config.capturesDir,
+      signal,
+    );
     console.log(`[agent] finished (${result.toolCalls} tool calls)`);
     if (result.responseText) {
       console.log(`[agent] response: ${result.responseText.slice(0, 800)}`);
     }
     this.invocations.setResponse(record.invocationId, result.responseText);
     this.invocations.addStep(record.invocationId, "agent.run", true,
+      `${result.toolCalls} tool calls; ${result.responseText.length} chars`);
+  }
+
+  /** Follow-up prompt on the idle live session: plain text, history kept by pi. */
+  private async followupProcessor(record: InvocationRecord, prompt: string, signal?: AbortSignal): Promise<void> {
+    if (!this.config.agentEnabled) {
+      await this.roundTripCapture(record, record.contextId, signal);
+      this.invocations.setResponse(record.invocationId,
+        "[slice] follow-up ok (PI_OS_AGENT=0)");
+      return;
+    }
+    const live = this.liveSessions.get(record.invocationId);
+    if (!live) {
+      throw new Error(`Live session for '${record.invocationId}' is gone`);
+    }
+    // Route this run's tool/activity callbacks to the same record.
+    const result = await promptFollowup(live, prompt, signal);
+    console.log(`[agent] followup finished (${result.toolCalls} tool calls)`);
+    if (result.responseText) {
+      console.log(`[agent] followup response: ${result.responseText.slice(0, 800)}`);
+    }
+    this.invocations.setResponse(record.invocationId, result.responseText);
+    this.invocations.addStep(record.invocationId, "agent.followup", true,
       `${result.toolCalls} tool calls; ${result.responseText.length} chars`);
   }
 

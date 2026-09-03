@@ -160,12 +160,19 @@ public partial class App : Application
             }
 
             overlay.CancelRequested += () => _ = invoker.CancelAsync(invocationId);
+            // Live session dies with the reader window (sequential follow-ups
+            // reuse it until then). Close is idempotent on the harness.
+            overlay.Closed += (_, _) => _ = invoker.CloseAsync(invocationId);
+            overlay.FollowupSubmitted += text => _ = HandleFollowupAsync(overlay, invocationId, text);
 
             var status = await invoker.PollUntilTerminalAsync(invocationId,
                 s => _dispatcher?.InvokeAsync(() => overlay.SetActivity(s.Activity)));
 
             // Result handling runs on the UI thread; the invocation slot frees
             // once the result is shown, not when the reader popup closes.
+            // Follow-up runs deliberately leave the global slot alone: the
+            // harness keys live sessions per window, so a follow-up and a new
+            // hotkey can each make progress without a global race.
             _dispatcher?.Invoke(() => SurfaceResult(overlay, status, dismissed));
         }
         catch (Exception ex)
@@ -177,6 +184,66 @@ public partial class App : Application
         {
             _invocationActive = false;
         }
+    }
+
+    /// <summary>Sequential follow-up on the idle live session (same window).
+    /// The reader shrinks back to the pill so agent focus changes cannot
+    /// deactivate/auto-close the window mid-run (which would dispose the
+    /// session via Closed -&gt; CloseAsync).</summary>
+    private async Task HandleFollowupAsync(OverlayWindow overlay, string invocationId, string prompt)
+    {
+        var invoker = _nodeInvoker;
+        if (invoker is null)
+        {
+            return;
+        }
+
+        _dispatcher?.Invoke(overlay.EnterFollowupPill);
+        var accepted = await invoker.SendFollowupAsync(invocationId, prompt);
+        if (!accepted)
+        {
+            _dispatcher?.Invoke(() => overlay.ReenterReaderAfterFailedFollowup("follow-up rejected — try again"));
+            return;
+        }
+
+        var status = await invoker.PollUntilTerminalAsync(invocationId,
+            s => _dispatcher?.InvokeAsync(() => overlay.SetActivity(s.Activity)));
+
+        _dispatcher?.Invoke(() =>
+        {
+            if (!overlay.IsVisible)
+            {
+                // Dismissed mid-follow-up: surface via toast like the first run.
+                if (status.State == "completed")
+                {
+                    var done = string.IsNullOrEmpty(status.ResponseText) ? "(no response text)" : status.ResponseText!;
+                    _tray?.ShowToast("pi-os — done", FirstLine(done),
+                        () => overlay.ReopenReader(done, failure: false));
+                }
+                else
+                {
+                    var reason = status.FailureMessage ?? $"follow-up {status.State}";
+                    _tray?.ShowToast($"pi-os — {status.State}", FirstLine(reason),
+                        () => overlay.ReopenReader(reason, failure: true));
+                }
+                return;
+            }
+            if (status.State == "completed")
+            {
+                var answer = string.IsNullOrEmpty(status.ResponseText)
+                    ? "(no response text)"
+                    : status.ResponseText!;
+                overlay.ShowAnswer(answer);
+            }
+            else if (status.State == "aborted" || status.State == "timed_out")
+            {
+                overlay.ReenterReaderAfterFailedFollowup(status.State == "aborted" ? "canceled — type a follow-up to retry" : "timed out — type a follow-up to retry");
+            }
+            else
+            {
+                overlay.ReenterReaderAfterFailedFollowup(FirstLine(status.FailureMessage ?? "follow-up failed — try again"));
+            }
+        });
     }
 
     private void SurfaceResult(OverlayWindow overlay, InvocationStatus status, bool dismissed)
