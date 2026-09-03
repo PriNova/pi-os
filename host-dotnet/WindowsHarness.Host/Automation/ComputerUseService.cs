@@ -19,6 +19,22 @@ public sealed class ComputerUseService(ContextStore store, WindowInfoService win
         0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2E,
     ];
 
+    /// <summary>Delay between injected keystrokes. Fast bursts overwhelm slow
+    /// text pipelines (UWP/TSF editors) and degenerate into repeated characters,
+    /// so characters are paced. Override with PI_OS_TYPE_INTERVAL_MS (milliseconds; 0 disables).
+    /// Measured default: 20 ms per character types reliably into the modern Notepad.</summary>
+    private static readonly TimeSpan TypeInterval = TypeIntervalFromEnvironment();
+
+    private static TimeSpan TypeIntervalFromEnvironment()
+    {
+        if (int.TryParse(Environment.GetEnvironmentVariable("PI_OS_TYPE_INTERVAL_MS"),
+                out var ms) && ms >= 0)
+        {
+            return TimeSpan.FromMilliseconds(ms);
+        }
+        return TimeSpan.FromMilliseconds(20);
+    }
+
     private static readonly IReadOnlyDictionary<string, ushort> NamedKeys = new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase)
     {
         ["enter"] = 0x0D, ["tab"] = 0x09, ["escape"] = 0x1B, ["backspace"] = 0x08,
@@ -67,16 +83,18 @@ public sealed class ComputerUseService(ContextStore store, WindowInfoService win
             throw new ComputerUseException("invalid_arguments", "text must be non-empty.");
         }
 
-        return RunAsync(contextId, "typeText", $"characters={text.Length}", focus: true, (_target, token, _) =>
+        return RunAsync(contextId, "typeText", $"characters={text.Length}", focus: true, async (_target, token, _) =>
         {
-            foreach (var character in text)
+            for (var i = 0; i < text.Length; i++)
             {
                 token.ThrowIfCancellationRequested();
-                SendUnicode(character, keyUp: false);
-                try { SendUnicode(character, keyUp: true); }
-                catch { TryReleaseUnicode(character); throw; }
+                SendUnicodeKeystroke(text[i]);
+                if (i < text.Length - 1)
+                {
+                    await Task.Delay(TypeInterval, token);
+                }
             }
-            return Task.FromResult<object>(new { action = "typeText", characters = text.Length });
+            return new { action = "typeText", characters = text.Length };
         }, cancellationToken);
     }
 
@@ -299,6 +317,39 @@ public sealed class ComputerUseService(ContextStore store, WindowInfoService win
 
     private static void SendUnicode(char character, bool keyUp) => SendKeyboard(0, character,
         KEYBD_EVENT_FLAGS.KEYEVENTF_UNICODE | (keyUp ? KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP : 0));
+
+    /// <summary>One Unicode keystroke as a single atomic Windows call.
+    /// Down and up travel in the same SendInput batch, so a late key-up can
+    /// never leave the key stuck down for auto-repeat to fill.</summary>
+    private static void SendUnicodeKeystroke(char character)
+    {
+        INPUT[] inputs = [UnicodeInput(character, keyUp: false), UnicodeInput(character, keyUp: true)];
+        var sent = PInvoke.SendInput(inputs, System.Runtime.InteropServices.Marshal.SizeOf<INPUT>());
+        if (sent == inputs.Length)
+        {
+            return;
+        }
+        if (sent == 1)
+        {
+            // Down landed without its up: rescue the stuck key best-effort.
+            TryReleaseUnicode(character);
+        }
+        throw new ComputerUseException("input_failed", "Windows did not accept the input event.");
+    }
+
+    private static INPUT UnicodeInput(char character, bool keyUp) => new()
+    {
+        type = INPUT_TYPE.INPUT_KEYBOARD,
+        Anonymous = new INPUT._Anonymous_e__Union
+        {
+            ki = new KEYBDINPUT
+            {
+                wVk = 0,
+                wScan = character,
+                dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_UNICODE | (keyUp ? KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP : 0),
+            },
+        },
+    };
 
     private static void TryReleaseUnicode(char character)
     {
