@@ -50,8 +50,10 @@ final class GlobalHotkey {
             nextID &+= 1
             var reference: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: nextID)
+            // Exclusive Carbon ownership is not a complete system-shortcut
+            // collision check; actual delivery still requires manual testing.
             let status = RegisterEventHotKey(Self.keyCode(requested.key), Self.modifiers(requested.modifiers),
-                                             id, GetApplicationEventTarget(), 0, &reference)
+                                             id, GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &reference)
             guard status == noErr, let reference else {
                 throw RegistrationError(operation: "Hotkey registration", status: status)
             }

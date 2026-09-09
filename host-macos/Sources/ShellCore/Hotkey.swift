@@ -19,7 +19,7 @@ public struct Hotkey: Equatable, Sendable, CustomStringConvertible {
         case invalidFormat, unknownModifier, duplicateModifier, missingModifier, unsupportedKey
         public var errorDescription: String? {
             switch self {
-            case .invalidFormat: "Use modifiers plus Space or F1–F12, for example Ctrl+Alt+Space."
+            case .invalidFormat: "Use modifiers plus Space or F1–F12, for example Ctrl+Alt+Cmd+Space."
             case .unknownModifier: "Supported modifiers: Ctrl, Alt/Option, Shift, Cmd/Command."
             case .duplicateModifier: "Each modifier may appear only once (including aliases)."
             case .missingModifier: "Include at least one modifier to avoid capturing an ordinary key."
@@ -30,7 +30,9 @@ public struct Hotkey: Equatable, Sendable, CustomStringConvertible {
 
     public let modifiers: Modifiers
     public let key: Key
-    public static let defaultBinding = Hotkey(modifiers: [.control, .option], key: .space)
+    // Provisional development default, not a permanent shipped choice or a
+    // conflict-free claim. Delivery requires separate manual qualification.
+    public static let defaultBinding = Hotkey(modifiers: [.control, .option, .command], key: .space)
 
     public static func parse(_ text: String) throws -> Self {
         let parts = text.split(separator: "+", omittingEmptySubsequences: false)

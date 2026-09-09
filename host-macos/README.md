@@ -20,9 +20,10 @@ not present in this checkout are not treated as implemented contracts.
 
 - A text-branded **pi-os** menu-bar app with demonstration, capability notice,
   session-only hotkey configuration/disable, close/cancel, and quit actions.
-- Public Carbon `RegisterEventHotKey`, not an event tap or global keyboard
-  monitor. Registration failures are visible; a failed replacement preserves
-  the previous binding. Quit unregisters owned shortcuts and the handler.
+- Public Carbon `RegisterEventHotKey` with `kEventHotKeyExclusive`, not an
+  event tap or global keyboard monitor. Registration failures are visible; a
+  failed replacement preserves the previous binding. Quit unregisters owned
+  shortcuts and the handler.
 - Nonactivating `NSPanel` surfaces, created as nonactivating from the outset.
   An explicit user invocation makes the prompt key for typing without calling
   `NSApplication.activate`. Submission relinquishes key status. Timer-driven
@@ -74,7 +75,12 @@ Do not infer macOS 14 runtime compatibility from a newer-SDK headless build.
 
 ## Hotkey configuration (for a later authorized manual run)
 
-Default: **Ctrl+Alt+Space** (Alt means Option on macOS).
+**Provisional development default: Ctrl+Option+Cmd+Space**, displayed as
+`Ctrl+Alt+Cmd+Space` (Alt means Option on macOS). This replaces the inherited
+Ctrl+Option+Space binding, identified during Mac review as a system input-source
+shortcut collision. The new combination is a provisional safer development
+choice, **not a conflict-free guarantee or a permanent shipped default**; it
+remains configurable and requires manual qualification.
 
 - Menu → **Configure hotkey…** applies a binding only for the current process.
 - `PI_OS_HOTKEY` sets the initial binding when launching the executable from
@@ -87,9 +93,11 @@ Default: **Ctrl+Alt+Space** (Alt means Option on macOS).
   keyboard-layout mapping is not implemented in this foothold.
 - Invalid initial configuration does not silently fall back. The menu remains
   available with an error and can configure or disable the shortcut.
-- System shortcuts, another app, Secure Input and Fn/media-key settings can
-  affect delivery even when Carbon registration succeeds. Registration success
-  is not a claim that a live shortcut was tested.
+- Registration requests exclusive Carbon ownership with `kEventHotKeyExclusive`.
+  **Carbon exclusivity does not detect every system shortcut.** System input-source
+  shortcuts, another app, Secure Input and Fn/media-key settings can still affect
+  delivery. A successful registration is neither a conflict-free guarantee nor
+  a claim that a live shortcut was tested; delivery needs manual qualification.
 
 Example **only after desktop testing is separately authorized**:
 
@@ -150,7 +158,7 @@ add a permission request just to make this demonstration appear more capable.
 ## Qualification and remaining manual checks
 
 Headless qualification on 2026-09-09: Apple silicon, macOS 26.5.2, Xcode Swift
-6.3.3. **24 XCTest tests passed** (7 demo lifecycle, 7 hotkey, 10 geometry), and
+6.3.3. **26 XCTest tests passed** (7 demo lifecycle, 9 hotkey, 10 geometry), and
 the release development bundle built with warnings treated as errors. Bundle
 metadata and the Mach-O deployment target are inspected without executing it.
 No GUI/permission/agent test was run. The checkout's existing forensic hook
@@ -167,8 +175,9 @@ Before any usable-Mac-port claim, separately authorize and perform:
   not proof of focus restoration. Do not force-activate another app as a fix.
 - [ ] Timer-driven reader appearance must not take focus or overwrite the
   clipboard. Click-to-select, explicit Copy/Paste and keyboard navigation work.
-- [ ] Test conflicting/invalid/repeated bindings, disabled hotkeys, Fn keys,
-  Secure Input, two instances, and release/restore on quit.
+- [ ] Test conflicting/invalid/repeated bindings, system input-source shortcuts,
+  disabled hotkeys, Fn keys, Secure Input, two instances, and release/restore
+  on quit. Verify delivery of the provisional default; exclusivity is not proof.
 - [ ] Test repeated hotkeys/drafts, rapid submit/cancel/close/quit, opening hotkey
   settings during a demo, and rejected stale completions.
 - [ ] Test negative-origin/mixed-scale displays, Dock/menu-bar positions,

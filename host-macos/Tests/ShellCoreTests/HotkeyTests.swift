@@ -2,8 +2,19 @@ import XCTest
 @testable import ShellCore
 
 final class HotkeyTests: XCTestCase {
-    func testDefaultAndAliasesNormalize() throws {
-        XCTAssertEqual(try Hotkey.parse(" control + OPTION + Space "), .defaultBinding)
+    func testProvisionalDefaultParsesWithControlOptionAndCommand() throws {
+        XCTAssertEqual(Hotkey.defaultBinding.modifiers, [.control, .option, .command])
+        XCTAssertEqual(Hotkey.defaultBinding.key, .space)
+        XCTAssertEqual(try Hotkey.parse("Ctrl+Option+Cmd+Space"), .defaultBinding)
+        XCTAssertEqual(try Hotkey.parse(" command + CONTROL + option + Space "), .defaultBinding)
+    }
+    func testProvisionalDefaultDescriptionRoundTrips() throws {
+        XCTAssertEqual(Hotkey.defaultBinding.description, "Ctrl+Alt+Cmd+Space")
+        XCTAssertEqual(try Hotkey.parse(Hotkey.defaultBinding.description), .defaultBinding)
+        XCTAssertNotEqual(try Hotkey.parse("Ctrl+Alt+Space"), .defaultBinding)
+    }
+    func testAliasesNormalize() throws {
+        XCTAssertEqual(try Hotkey.parse(" control + OPTION + Space ").description, "Ctrl+Alt+Space")
         XCTAssertEqual(try Hotkey.parse("shift+cmd+ctrl+f9").description, "Ctrl+Shift+Cmd+F9")
         XCTAssertEqual(try Hotkey.parse("Command+Opt+F12").description, "Alt+Cmd+F12")
     }
