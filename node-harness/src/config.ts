@@ -32,7 +32,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): HarnessConfig 
 }
 
 function parseTimeoutMs(raw: string | undefined): number {
-  const value = Number.parseInt(raw ?? "300000", 10);
+  const value = Number.parseInt(raw ?? "0", 10);
   return Number.isFinite(value) && value >= 0 ? value : 300_000;
 }
 
