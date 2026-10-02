@@ -33,10 +33,29 @@ the hotkey.
 `docs/desktop-input-semantics.md` (tracked) is the binding contract for typed
 text input: characters must arrive exactly as sent, `\n` must become a real
 line break, keystrokes are paced (default 20 ms/char, `PI_OS_TYPE_INTERVAL_MS`),
-and down/up travel atomically. Several of these were learned only through live
+and Windows down/up travel in one SendInput batch. Native Mac pairs are balanced
+and consecutive, not an atomic OS transaction. Several of these were learned only through live
 defects, so read that document and re-run its verification whenever you change
 `ComputerUseService` or add a new platform host. Invariants are host-neutral;
 mechanisms are Windows-specific — never push them into the shared node layer.
+
+## macOS development and acceptance
+
+Use stable `PI_OS_SIGN_IDENTITY` for installed updates; never silently allow an
+ad-hoc/signing-identity change, edit TCC or disable OS protections. Verify an idle
+owned executable/PID before replacing or stopping it. `host-macos/README.md` and
+`host-macos/ACCEPTANCE.md` describe supported builds and remaining gates.
+
+`npm test` preloads a no-live-provider guard and runs serially. Swift lifecycle
+fixtures use the same guard. Do not bypass it or issue local-provider/catalog/
+grounding calls while another process owns a local GPU reservation. Coordinate
+live-model and visible-desktop fixtures separately; never stop resident models.
+Use only dummy fields/counters, not real accounts, credentials or deletion.
+
+Keep native identity/focus/occlusion, cancellation, budgets and uncertainty checks.
+Changing appearance never renews or repins authority. Deletion heuristics and
+trusted arbitrary extensions are not a filesystem sandbox. Do not claim full parity
+from fixture success or change Windows input mechanics in a platform-port patch.
 
 ## Progress tracker commits
 
