@@ -18,6 +18,7 @@ public sealed class NodeInvokerTests
     public async Task WindowsReaderExplicitlyRetainsItsThreadAndAuthenticatesBothTurns()
     {
         var paths = new List<string>();
+        string? invocationId = null;
         using var handler = new FixtureHandler(async request =>
         {
             paths.Add(request.RequestUri!.AbsolutePath);
@@ -27,20 +28,19 @@ public sealed class NodeInvokerTests
             {
                 Assert.True(body.RootElement.GetProperty("retainSession").GetBoolean());
                 Assert.Equal("ctx-fixture", body.RootElement.GetProperty("contextId").GetString());
-                return new HttpResponseMessage(HttpStatusCode.Accepted)
-                {
-                    Content = new StringContent("{\"invocationId\":\"inv-fixture\"}", Encoding.UTF8, "application/json"),
-                };
+                invocationId = body.RootElement.GetProperty("invocationId").GetString();
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
             }
             Assert.Equal("Second question", body.RootElement.GetProperty("prompt").GetString());
             return new HttpResponseMessage(HttpStatusCode.Accepted);
         });
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://fixture.invalid") };
         var invoker = new NodeInvoker("fixture-token", client);
-        var snapshot = new DesktopContextSnapshot { Id = "ctx-fixture", CapturedAt = DateTimeOffset.UtcNow, Cursor = new Point2D(0, 0) };
-        Assert.Equal("inv-fixture", await invoker.SendInvocationAsync(snapshot, "First question"));
-        Assert.True(await invoker.SendFollowupAsync("inv-fixture", "Second question"));
-        Assert.Equal(new[] { "/invoke", "/invocations/inv-fixture/followup" }, paths);
+        var snapshot = new DesktopContextSnapshot { Id = "ctx-fixture", CapturedAt = DateTimeOffset.UtcNow, Cursor = new Point2D { X = 0, Y = 0 } };
+        var id = await invoker.SendInvocationAsync(snapshot, "First question");
+        Assert.NotNull(id); Assert.Equal(invocationId, id);
+        Assert.True(await invoker.SendFollowupAsync(id!, "Second question"));
+        Assert.Equal(new[] { "/invoke", $"/invocations/{id}/followup" }, paths);
     }
 
     [Theory]
@@ -54,7 +54,7 @@ public sealed class NodeInvokerTests
             Content = new StringContent($"{{\"state\":\"completed\",\"followupAvailable\":{available}}}", Encoding.UTF8, "application/json"),
         }));
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://fixture.invalid") };
-        var status = await new NodeInvoker("fixture-token", client).PollUntilTerminalAsync("inv-fixture");
+        var status = await new NodeInvoker("fixture-token", client).PollUntilTerminalAsync("inv-fixture", onUpdate: null);
         Assert.True(status.IsTerminal);
         Assert.Equal(expected, status.FollowupAvailable);
     }
