@@ -1,0 +1,13 @@
+{
+  "id": "ctx-macos-fixture",
+  "capturedAt": "2026-09-15T10:00:00Z",
+  "cursor": {"x": -400, "y": 250},
+  "foregroundWindow": {"hwnd": "0x1234", "processId": 123, "processName": "TextEdit", "title": "Document", "bounds": {"x": -800, "y": 100, "width": 800, "height": 600}, "monitorId": "2"},
+  "windowUnderCursor": null,
+  "targetWindow": {"hwnd": "0x1234", "processId": 123, "processName": "TextEdit", "title": "Document", "bounds": {"x": -800, "y": 100, "width": 800, "height": 600}, "monitorId": "2"},
+  "screenshot": {"kind": "window", "imageId": "shot-fixture", "filePath": "fixtures/captures/window.png", "bounds": {"x": -800, "y": 100, "width": 800, "height": 600}},
+  "monitors": [
+    {"id": "1", "isPrimary": true, "bounds": {"x": 0, "y": 0, "width": 1728, "height": 1117}, "workArea": {"x": 0, "y": 32, "width": 1728, "height": 1047}},
+    {"id": "2", "isPrimary": false, "bounds": {"x": -1920, "y": -400, "width": 1920, "height": 1080}, "workArea": {"x": -1920, "y": -375, "width": 1920, "height": 1055}}
+  ]
+}

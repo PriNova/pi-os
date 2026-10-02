@@ -36,6 +36,8 @@ export interface InvocationRecord {
   responseText?: string;
   /** Why the invocation failed/aborted/timed out; terminal failure states only. */
   failureMessage?: string;
+  /** True only while this record owns an open retained thread. */
+  followupAvailable?: boolean;
 }
 
 const MAX_RECORDS = 200;

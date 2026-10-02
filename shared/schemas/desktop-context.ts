@@ -1,11 +1,10 @@
 /**
  * Shared desktop context snapshot schema.
  *
- * Canonical source for the wire format between the C# Windows host and the
- * TypeScript agent harness. The C# mirror lives in
- * host-dotnet/WindowsHarness.Contracts and must stay field-compatible.
- *
- * See docs/windows-agent-harness-handoff.md, section 5.
+ * Canonical source for the wire format between native hosts and the
+ * TypeScript agent harness. Mirrors in host-dotnet/WindowsHarness.Contracts
+ * and host-macos/Sources/PiOSCore must remain field-compatible.
+ * macOS geometry uses CG global top-left points; Windows uses physical pixels.
  * Keep the first schema stable and extensible; do not make it exhaustive.
  */
 
@@ -28,6 +27,9 @@ export interface ScreenshotRef {
   filePath?: string;
   imageId?: string;
   bounds?: Rect;
+  /** Actual delivered image dimensions; coordinates refer to these pixels, not desktop points. */
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
 export interface MonitorSummary {
@@ -40,7 +42,7 @@ export interface MonitorSummary {
 }
 
 export interface WindowContext {
-  /** Win32 HWND as hex string, for example "0x000A1234". */
+  /** Opaque native window ID: Win32 HWND or macOS CGWindowID encoded in hex. Always pair with processId. */
   hwnd: string;
   processId: number;
   processName: string;
@@ -49,8 +51,13 @@ export interface WindowContext {
   commandLine?: string;
   title: string;
   className?: string;
+  /** macOS Finder desktop surface; absent for ordinary windows. */
+  surface?: "finderDesktop";
+  desktopWorkArea?: Rect;
   /** Active folder path when the window hosts a Windows shell view (File Explorer); null otherwise. */
   shellFolderPath?: string;
+  /** Native document URL path, when the pinned AX window exposes a file URL. */
+  documentPath?: string;
   bounds: Rect;
   monitorId?: string;
   dpi?: number;
@@ -97,6 +104,8 @@ export interface DesktopContextSnapshot {
   selectedDesktopItemCount?: number;
   selectedDesktopItemsTruncated?: boolean;
   screenshot?: ScreenshotRef;
+  /** Optional macOS Brave route. Private endpoint/tab capabilities are not part of this snapshot. */
+  browser?: { name: "Brave"; mode: "cdp"; pinned: boolean };
   monitors: MonitorSummary[];
   environment?: EnvironmentInfo;
 }

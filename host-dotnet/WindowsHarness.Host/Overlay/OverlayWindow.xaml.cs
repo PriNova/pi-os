@@ -256,7 +256,7 @@ public partial class OverlayWindow : Window
     }
 
     /// <summary>Expand into the reader popup showing the final answer.</summary>
-    public void ShowAnswer(string text)
+    public void ShowAnswer(string text, bool followupAvailable = true)
     {
         // Copy immediately: the clipboard is ready even if the user hides
         // the pill during the terminal flash.
@@ -264,7 +264,7 @@ public partial class OverlayWindow : Window
         if (!_pillMode)
         {
             SwitchToReader("pi-os", text);
-            EnableFollowup();
+            SetFollowupAvailability(followupAvailable);
             return;
         }
 
@@ -272,7 +272,7 @@ public partial class OverlayWindow : Window
         BeginTerminalFlash(() =>
         {
             SwitchToReader("pi-os", text);
-            EnableFollowup();
+            SetFollowupAvailability(followupAvailable);
         });
     }
 
@@ -317,6 +317,12 @@ public partial class OverlayWindow : Window
         {
             FollowupHint.Text = "working…";
         }
+    }
+
+    private void SetFollowupAvailability(bool available)
+    {
+        if (available) EnableFollowup();
+        else DisableFollowup("conversation ended — start a new task");
     }
 
     private void DisableFollowup(string hint)
@@ -389,16 +395,16 @@ public partial class OverlayWindow : Window
 
     /// <summary>Back to the reader with the previous answer after a failed
     /// follow-up, so the user can retry. The answer box is untouched.</summary>
-    public void ReenterReaderAfterFailedFollowup(string hint)
+    public void ReenterReaderAfterFailedFollowup(string hint, bool followupAvailable = true)
     {
         SwitchToReader(_lastReaderTitle, _lastReaderText);
-        EnableFollowup();
+        SetFollowupAvailability(followupAvailable);
         FollowupHint.Text = hint;
     }
 
     /// <summary>Toast-click path after dismissal: resurface the reader popup
     /// (the window was hidden, never closed, so its state is intact).</summary>
-    public void ReopenReader(string text, bool failure)
+    public void ReopenReader(string text, bool failure, bool followupAvailable = true)
     {
         if (failure)
         {
@@ -406,7 +412,7 @@ public partial class OverlayWindow : Window
         }
         else
         {
-            ShowAnswer(text); // Recopies to clipboard — harmless, arguably useful.
+            ShowAnswer(text, followupAvailable); // Preserve the retained-thread availability.
         }
 
         if (!IsVisible)
