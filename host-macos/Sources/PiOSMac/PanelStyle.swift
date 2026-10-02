@@ -66,10 +66,7 @@ final class PanelSurface: NSView {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             let view = NSGlassEffectView(); view.style = .regular
-            #if compiler(>=6.3)
-            // High-frequency input does not need decorative interactive distortion.
-            if #available(macOS 27.0, *) { view.effectIsInteractive = false }
-            #endif
+            // Interactive distortion defaults off; avoid a needless SDK-27 property.
             glass = view; addSubview(view)
         }
         #endif

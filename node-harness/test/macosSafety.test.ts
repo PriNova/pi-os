@@ -11,7 +11,7 @@ import { supportDirectory } from "../src/platformPaths.js";
 import type { HostClient } from "../src/hostClient.js";
 
 test("Darwin paths preserve Windows defaults and explicit overrides", () => {
-  assert.equal(supportDirectory({}, "darwin", "/Users/test"), "/Users/test/Library/Application Support/pi-os");
+  assert.equal(supportDirectory({}, "darwin", "/Users/test"), join("/Users/test", "Library", "Application Support", "pi-os"));
   assert.equal(supportDirectory({ PI_OS_SUPPORT_DIR: "/custom" }, "darwin", "/Users/test"), "/custom");
   assert.equal(supportDirectory({ LOCALAPPDATA: "/local" }, "win32", "/home"), join("/local", "pi-os"));
 });
