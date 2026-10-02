@@ -23,6 +23,21 @@ CI uses fresh hosted runners and a no-live-provider guard. No models, provider t
 TCC grants, browser consent or notarization/signing secrets are required. Passing these
 jobs does not exercise native input, VoiceOver or live-model conversations.
 
+## Hosted CI evidence
+
+[Run 36971900764](https://github.com/tjansn/pi-os-mac/actions/runs/36971900764)
+at implementation revision `71a3bec` passed on 2026-10-02:
+
+- Windows: TypeScript check/build, 68 Node passes / 4 Mac-only skips, **46 .NET passes**.
+- macOS 14 and 26: TypeScript check/build, **72 Node / 67 Swift passes** each,
+  Swift↔Node conformance and release Swift build.
+
+Initial CI failures exposed a test-path separator assumption, an SDK-27-only glass
+property, and new Windows fixture constructor/ID assumptions. They were fixed rather
+than bypassed. This is fork-run evidence, not upstream required-check approval or
+physical GUI acceptance. The PR remains draft. Independent material/glass builds are
+verified; full older-OS visual/permission/input acceptance is still pending.
+
 ## Historical signed GUI evidence (pre-PR local build)
 
 The source before PR preparation was installed using a stable Apple Development
@@ -42,7 +57,7 @@ later shared-session refactor or Windows UI changes against a signed installed b
 
 ## Still required before merge/release
 
-- Passing Windows/.NET and both macOS CI jobs; maintainer review of shared lifecycle and
+- Upstream required checks/approval; maintainer review of shared lifecycle and
   Windows reader availability behavior. Physical Windows reader/input regression matrix.
 - Signed PR-branch native/reader acceptance, real-model conversations and native/browser
   follow-ups in a coordinated provider window. Never probe an occupied local GPU.

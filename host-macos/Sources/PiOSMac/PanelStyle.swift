@@ -210,4 +210,3 @@ final class PanelButton: NSButton {
     }
     override var focusRingMaskBounds: NSRect { bounds }
 }
-
