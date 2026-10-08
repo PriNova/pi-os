@@ -8,7 +8,8 @@ using WindowsHarness.Host.Diagnostics;
 namespace WindowsHarness.Host.Http;
 
 /// <summary>Parsed snapshot of one invocation record (protocol.md GET /invocations/{id}).</summary>
-public sealed record InvocationStatus(string State, string? Activity, string? ResponseText, string? FailureMessage)
+public sealed record InvocationStatus(string State, string? Activity, string? ResponseText, string? FailureMessage,
+    bool FollowupAvailable = false)
 {
     public bool IsTerminal => State is "completed" or "failed" or "aborted" or "timed_out";
 }
@@ -44,7 +45,7 @@ public sealed class NodeInvoker
     /// <param name="token">Shared harness auth token. In production the
     /// supervisor passes its per-session token here; when omitted the host
     /// process environment (PI_OS_TOKEN) is consulted.</param>
-    public NodeInvoker(string? token = null)
+    public NodeInvoker(string? token = null, HttpClient? client = null)
     {
         _token = string.IsNullOrEmpty(token)
             ? Environment.GetEnvironmentVariable(TokenEnvironmentVariable)
@@ -56,7 +57,7 @@ public sealed class NodeInvoker
 
         var baseUrl = Environment.GetEnvironmentVariable("PI_OS_NODE_URL")
             ?? "http://127.0.0.1:17832";
-        _client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+        _client = client ?? new HttpClient { BaseAddress = new Uri(baseUrl) };
     }
 
     /// <summary>Submits the invocation. Returns the invocation id on
@@ -69,6 +70,7 @@ public sealed class NodeInvoker
             contextId = snapshot.Id,
             prompt,
             invokedAt = DateTimeOffset.UtcNow,
+            retainSession = true,
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "/invoke")
@@ -83,7 +85,7 @@ public sealed class NodeInvoker
             using var response = await _client.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                Log.Info($"Invocation {payload.invocationId} accepted by harness ({payload.contextId})");
+                Log.Info($"Invocation {payload.invocationId} accepted by harness");
                 return payload.invocationId;
             }
 
@@ -317,7 +319,8 @@ public sealed class NodeInvoker
             State: state,
             Activity: OptionalString(root, "activity"),
             ResponseText: OptionalString(root, "responseText"),
-            FailureMessage: OptionalString(root, "failureMessage"));
+            FailureMessage: OptionalString(root, "failureMessage"),
+            FollowupAvailable: root.TryGetProperty("followupAvailable", out var followup) && followup.ValueKind == JsonValueKind.True);
     }
 
     private static string? OptionalString(JsonElement element, string name)

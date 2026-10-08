@@ -23,4 +23,8 @@ public sealed record ScreenshotRef
     public string? ImageId { get; init; }
 
     public Rect? Bounds { get; init; }
+
+    /// <summary>Optional actual delivered image dimensions (macOS capture transform).</summary>
+    public int? ImageWidth { get; init; }
+    public int? ImageHeight { get; init; }
 }

@@ -15,9 +15,13 @@ public sealed record WindowContext
 
     public required string Title { get; init; }
     public string? ClassName { get; init; }
+    /// <summary>Optional native surface tag, e.g. finderDesktop on macOS.</summary>
+    public string? Surface { get; init; }
+    public Rect? DesktopWorkArea { get; init; }
 
     /// <summary>Active folder path when the window hosts a Windows shell view (File Explorer); null otherwise.</summary>
     public string? ShellFolderPath { get; init; }
+    public string? DocumentPath { get; init; }
 
     public required Rect Bounds { get; init; }
     public string? MonitorId { get; init; }

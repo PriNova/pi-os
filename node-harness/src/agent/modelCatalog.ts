@@ -1,5 +1,6 @@
 import { getSupportedThinkingLevels, type Model } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { loadAgentResources, registerResourceProviders } from "./resources.js";
 
 /**
  * The pi model catalog as seen by the host settings page.
@@ -20,16 +21,24 @@ export interface ModelSummary {
   thinkingLevels: string[];
 }
 
-export function getModelRuntime(): Promise<ModelRuntime> {
-  return ModelRuntime.create();
+export function getModelRuntime(): Promise<ModelRuntime> { return ModelRuntime.create(); }
+
+export async function createModelCatalogContext(trustedResources = false): Promise<{ runtime: ModelRuntime; dispose: () => void }> {
+  const runtime = await getModelRuntime();
+  let dispose = () => {};
+  if (trustedResources) {
+    const loader = await loadAgentResources({ name: "pi-os-catalog", factory() {} });
+    dispose = await registerResourceProviders(loader, runtime);
+  }
+  return { runtime, dispose };
 }
 
 /**
  * Models with configured authentication. Sorted provider asc, then id —
  * deterministic UI ordering.
  */
-export async function listAvailableModels(): Promise<ModelSummary[]> {
-  const runtime = await getModelRuntime();
+export async function listAvailableModels(runtime?: ModelRuntime): Promise<ModelSummary[]> {
+  runtime ??= await getModelRuntime();
   return (await runtime.getAvailable())
     .map(summarizeModel)
     .sort((a, b) =>

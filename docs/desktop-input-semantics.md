@@ -90,3 +90,28 @@ mechanism into the shared node layer.
 - 2026-09-03: filed after two input defects. Pacing fix (`e7a3bb6`) and newline
   handling (`SendTextCharacter`). Both were caught only in live testing; the
   invariants above are the regression fence.
+
+## macOS / browser mechanisms and acceptance
+
+The Windows mechanisms above remain unchanged. Native macOS uses scalar-safe
+Unicode strokes, collapses CRLF and posts real Return pairs. Its down/up pairs
+are preallocated, consecutive and balanced, **not an atomic OS transaction**.
+Posting events is not proof that every receiving application delivered them.
+The default is the same 20 ms spacing; `PI_OS_TYPE_INTERVAL_MS` accepts 0–1000 ms.
+Scheduled pacing over 20 s is refused before focus/input; split long text instead
+of silently truncating or racing the tool deadline. The 20,000 UTF-16-unit input
+limit also applies.
+
+Return can submit forms or execute terminal commands. Multiline native input
+requires an identified authorized multiline destination. Identity, focus,
+credential/deletion policy, cancellation and cumulative budgets still apply;
+interruption after possible posting is an uncertain failure, never replayed.
+
+Scoped Brave uses private verified `Input.insertText`, not keystroke bursts or
+clipboard paste. It normalizes CRLF/CR, permits multiline fill only for textarea
+or contenteditable, verifies privately and never synthesizes Enter submission.
+Credential input opt-in is not credential extraction; values stay out of snapshots.
+
+See `host-macos/ACCEPTANCE.md` for component evidence and pending framework,
+slow-editor, keyboard-layout and live-model acceptance. Do not infer broad
+application fidelity from a single receiving fixture or a successful OS post.

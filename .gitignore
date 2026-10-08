@@ -33,3 +33,14 @@ tmp/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+
+# Local acceptance artifacts and Python bytecode
+host-macos/qa/
+__pycache__/
+*.pyc

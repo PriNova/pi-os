@@ -29,11 +29,15 @@ public sealed class HostApiServer
     private readonly ContextStore _store;
     private readonly CapturePipeline _pipeline;
     private readonly ComputerUseService _computerUse;
+    private readonly string _token;
+    private readonly bool _insecureDev;
 
-    public HostApiServer(ContextStore store, CapturePipeline pipeline)
+    public HostApiServer(ContextStore store, CapturePipeline pipeline, string token)
     {
         _store = store;
         _pipeline = pipeline;
+        _token = token;
+        _insecureDev = Environment.GetEnvironmentVariable("PI_OS_INSECURE_DEV") == "1";
         _computerUse = new ComputerUseService(store, new WindowInfoService());
     }
 
@@ -53,6 +57,15 @@ public sealed class HostApiServer
         });
 
         var app = builder.Build();
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path != "/health" && !Authorized(context.Request))
+            {
+                await FailEnvelope("unauthorized", "Missing or wrong X-Harness-Token", 401).ExecuteAsync(context);
+                return;
+            }
+            await next(context);
+        });
 
         app.MapGet("/health", () => Results.Json(new
         {
@@ -174,15 +187,8 @@ public sealed class HostApiServer
         return int.TryParse(Environment.GetEnvironmentVariable("PI_OS_HOST_PORT"), out var port) ? port : 17831;
     }
 
-    private static bool Authorized(HttpRequest request)
-    {
-        var token = Environment.GetEnvironmentVariable(NodeInvoker.TokenEnvironmentVariable);
-        if (string.IsNullOrEmpty(token))
-        {
-            return true; // Dev mode without a token.
-        }
-        return request.Headers["X-Harness-Token"].ToString() == token;
-    }
+    private bool Authorized(HttpRequest request) =>
+        LocalAuthentication.Authorized(request.Headers["X-Harness-Token"].ToString(), _token, _insecureDev);
 
     /// <summary>Body shape per protocol.md: {"arguments":{"contextId":"..."}}.</summary>
     private static (string ContextId, JsonElement Arguments) ParseArgs(JsonElement body)

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { supportDirectory } from "../platformPaths.js";
 
 /**
  * User-selected agent model + reasoning effort, chosen in the host settings
@@ -59,8 +59,7 @@ export class AgentModelSettings {
 }
 
 function defaultSettingsPath(): string {
-  const localAppData = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
-  return join(localAppData, "pi-os", "settings.json");
+  return join(supportDirectory(), "settings.json");
 }
 
 /** Tolerant reader: any malformed/stale file degrades to "no preference". */
