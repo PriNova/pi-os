@@ -112,6 +112,18 @@ clipboard paste. It normalizes CRLF/CR, permits multiline fill only for textarea
 or contenteditable, verifies privately and never synthesizes Enter submission.
 Credential input opt-in is not credential extraction; values stay out of snapshots.
 
+Browser fill and keypress recheck the active field, its shadow hosts and page focus
+before delivery. Fill also requires a complete replacement selection; unsupported
+input selection types are refused. Observed focus or selection loss stops delivery
+without refocusing or replay. These CDP checks and input calls are separate: they
+reduce the race but do not provide atomic recipient isolation.
+
+Browser key-down/up use the same target session. Cancellation before key-down sends
+neither event. Once key-down can have been sent, release is attempted before action
+cancellation or reader disposal closes the socket. Each leg has a separate 1.5 s
+maximum deadline. Socket loss or a failed release is an uncertain outcome: no
+reconnect or replay, and no further mutations in that task.
+
 See `host-macos/ACCEPTANCE.md` for component evidence and pending framework,
 slow-editor, keyboard-layout and live-model acceptance. Do not infer broad
 application fidelity from a single receiving fixture or a successful OS post.

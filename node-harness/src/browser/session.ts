@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { HostClient } from "../hostClient.js";
-import { BrowserError, CdpConnection, failure, verifyBraveEndpoint, type BrowserConnection, type Cdp } from "./cdp.js";
+import { BrowserError, CdpConnection, dispatchKeyPair, failure, verifyBraveEndpoint, type BrowserConnection, type Cdp } from "./cdp.js";
 import { PAGE_SCRIPT } from "./pageScript.js";
 
 export interface BrowserAction { action: "click" | "fill" | "press" | "scroll"; ref: string; text?: string; key?: string; deltaY?: number }
@@ -55,7 +55,12 @@ export class BrowserSession {
   private snapshotTime = 0;
   private snapshots = 0;
   private readonly prefix = randomUUID().slice(0, 8);
-  private readonly abort = () => { this.ended = true; this.refs.clear(); this.client?.close(); };
+  private keyPair?: Promise<void>;
+  private readonly abort = () => {
+    this.ended = true; this.refs.clear();
+    // Revocation is immediate, but release must precede intentional socket teardown.
+    if (!this.keyPair) this.client?.close();
+  };
   constructor(private host: HostClient, private contextId: string, private signal?: AbortSignal, private dependencies = realDependencies) {
     signal?.addEventListener("abort", this.abort, { once: true });
   }
@@ -165,7 +170,7 @@ export class BrowserSession {
     if (!result.result?.objectId) failure("browser_script_failed", "The isolated browser helper is unavailable");
     this.helper = result.result.objectId;
   }
-  private async helperCall(method: "snapshot" | "inspect" | "act" | "verifyFill" | "clear", args: unknown[], signal?: AbortSignal) {
+  private async helperCall(method: "snapshot" | "inspect" | "inspectFocused" | "act" | "verifyFill" | "clear", args: unknown[], signal?: AbortSignal) {
     if (!this.helper) failure("browser_stale", messages.browser_stale!);
     const result = await this.page("Runtime.callFunctionOn", { objectId: this.helper,
       functionDeclaration: "function(method,args){return this[method](...args)}", arguments: [{ value: method }, { value: args }], returnByValue: true }, signal);
@@ -214,8 +219,13 @@ export class BrowserSession {
         const result = await this.helperCall("act", [action.ref, action.action, action.key, action.deltaY, this.allowCredentialFields, action.text], signal);
         if (result?.error && result.error !== "browser_focus_failed") mutated = false;
         this.requireOK(result);
+        if (action.action === "fill" || action.action === "press") {
+          // CDP inspection and delivery are separate calls, not an atomic transaction.
+          // Refuse observed focus/selection changes; never refocus or replay after preparation.
+          this.requireOK(await this.helperCall("inspectFocused", [action.ref, action.action, action.key, this.allowCredentialFields, action.text], signal));
+          this.check(signal);
+        }
         if (action.action === "fill") {
-          this.requireOK(await this.helperCall("inspect", [action.ref, action.action, action.key, this.allowCredentialFields, action.text], signal));
           await this.page("Input.insertText", { text: action.text }, signal);
           const verified = await this.helperCall("verifyFill", [action.ref, action.text, this.allowCredentialFields], signal);
           if (verified !== true) failure("input_failed", "Text delivery was not verified. Do not retry.");
@@ -223,8 +233,19 @@ export class BrowserSession {
           const key = action.key === "Space" ? " " : action.key!;
           const codes: Record<string, number> = { Enter: 13, Tab: 9, Escape: 27, Space: 32, Backspace: 8, Delete: 46, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Home: 36, End: 35 };
           const params = { key, code: action.key, windowsVirtualKeyCode: codes[action.key!], ...(action.key === "Enter" ? { text: "\r" } : action.key === "Space" ? { text: " " } : {}) };
-          await this.page("Input.dispatchKeyEvent", { type: "keyDown", ...params }, signal);
-          await this.page("Input.dispatchKeyEvent", { type: "keyUp", key, code: action.key, windowsVirtualKeyCode: codes[action.key!] }, signal);
+          this.check(signal);
+          const client = this.client!, sessionId = this.sessionId!;
+          // Publish before sending so even a synchronous abort defers socket closure.
+          const pair = Promise.resolve().then(() => {
+            this.check(signal);
+            return dispatchKeyPair(client, params, sessionId, signal);
+          });
+          this.keyPair = pair;
+          try { await pair; }
+          finally {
+            this.keyPair = undefined;
+            if (this.ended || signal?.aborted) this.abort();
+          }
         }
         this.check(signal);
         return { performed: true, verification: action.action === "fill" ? "Text value verified. Take browser_snapshot to verify the page's resulting state." : "Action dispatched once. Take browser_snapshot and verify the requested postcondition before claiming success." };
@@ -247,6 +268,10 @@ export class BrowserSession {
   async dispose() {
     this.signal?.removeEventListener("abort", this.abort);
     this.refs.clear();
+    if (this.keyPair) {
+      this.abort();
+      await this.keyPair.catch(() => {});
+    }
     try {
       if (this.client && this.sessionId && !this.ended) {
         if (this.helper && !this.dialog) {

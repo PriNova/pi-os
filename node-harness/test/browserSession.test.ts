@@ -11,7 +11,10 @@ class FakeCDP implements Cdp {
   targets = [{ type: "page", url: initial.url, targetId: "chosen" }, { type: "page", url: "https://private.test/", targetId: "unrelated" }];
   url = initial.url; loader = "doc1"; refs = ""; value = ""; mutated = 0; closed = false;
   deny?: string; failMutation = false; afterInspect?: () => void;
-  async call(method: string, params: any = {}, sessionId?: string): Promise<any> {
+  focusError?: string; afterAct?: () => void; afterFocused?: () => void; afterKeyDown?: () => Promise<void> | void;
+  async call(method: string, params: any = {}, sessionId?: string, signal?: AbortSignal): Promise<any> {
+    signal?.throwIfAborted();
+    if (this.closed) throw new Error('browser_disconnected');
     this.calls.push({ method, params, sessionId });
     if (method === "Target.getTargets") return { targetInfos: this.targets };
     if (method === "Browser.getWindowForTarget") return { bounds: { left: 10, top: 20, width: 800, height: 600, windowState: "normal" } };
@@ -29,11 +32,18 @@ class FakeCDP implements Cdp {
       }
       if (name === "act") {
         if (this.deny === 'credential_input_blocked' && args[4] !== true) return { result: { value: { error: this.deny } } };
-        this.mutated++; if (this.failMutation) throw new Error("simulated uncertain delivery"); return { result: { value: { ok: true } } };
+        this.mutated++; this.afterAct?.();
+        if (this.failMutation) throw new Error("simulated uncertain delivery"); return { result: { value: { ok: true } } };
+      }
+      if (name === "inspectFocused") {
+        const error = this.focusError;
+        this.afterFocused?.();
+        return { result: { value: error ? { error } : { ok: true } } };
       }
       if (name === "verifyFill") return { result: { value: args[1] === this.value } };
     }
     if (method === "Input.insertText") this.value = params.text;
+    if (method === "Input.dispatchKeyEvent" && params.type === "keyDown") await this.afterKeyDown?.();
     return {};
   }
   onEvent(f: (m: string, p: any, s?: string) => void) { this.events.push(f); }
@@ -172,6 +182,75 @@ test("dialogs, revoked control, and cancellation fail closed; no automatic dialo
   await assert.rejects(g.session.act({ action: "click", ref: g.cdp.refs + "1" }), /control_disabled/); assert.equal(g.cdp.mutated, 0); await g.session.dispose();
   const abort = new AbortController(), h = fixture(abort.signal); await h.session.snapshot(); abort.abort();
   await assert.rejects(h.session.act({ action: "click", ref: h.cdp.refs + "1" })); assert(h.cdp.closed); assert.equal(h.cdp.mutated, 0); await h.session.dispose();
+});
+
+test("fill and press refuse focus/selection loss after preparation and revoke subsequent input", async () => {
+  for (const action of ['fill', 'press'] as const) {
+    const f = fixture(); await f.session.snapshot();
+    f.cdp.afterAct = () => { f.cdp.focusError = 'browser_focus_failed'; };
+    await assert.rejects(f.session.act({ action, ref: f.cdp.refs + '2', text: 'dummy text', key: 'Enter' }), /browser_focus_failed/);
+    assert(!f.cdp.calls.some(c => c.method.startsWith('Input.')));
+    assert(f.hostCalls.some(c => c.name === 'browser.invalidate'));
+    f.cdp.afterAct = undefined; f.cdp.focusError = undefined;
+    await f.session.snapshot();
+    await assert.rejects(f.session.act({ action: 'click', ref: f.cdp.refs + '1' }), /input_failed/);
+    assert.equal(f.cdp.mutated, 1); await f.session.dispose();
+  }
+});
+
+test("cancellation after focused validation sends no text or key-down", async () => {
+  for (const action of ['fill', 'press'] as const) {
+    const controller = new AbortController(), f = fixture(controller.signal);
+    await f.session.snapshot(); f.cdp.afterFocused = () => controller.abort();
+    await assert.rejects(f.session.act({ action, ref: f.cdp.refs + '2', text: 'dummy text', key: 'Enter' }));
+    assert(!f.cdp.calls.some(c => c.method.startsWith('Input.')));
+    assert(f.hostCalls.some(c => c.name === 'browser.invalidate'));
+    await f.session.dispose();
+  }
+});
+
+test("tool and lifetime cancellation release the same browser key before socket teardown", async () => {
+  for (const lifetime of [false, true]) {
+    const controller = new AbortController(), f = fixture(lifetime ? controller.signal : undefined);
+    await f.session.snapshot();
+    f.cdp.afterKeyDown = () => { controller.abort(); assert.equal(f.cdp.closed, false); };
+    await assert.rejects(f.session.act({ action: 'press', ref: f.cdp.refs + '1', key: 'Space' }, lifetime ? undefined : controller.signal));
+    const keys = f.cdp.calls.filter(c => c.method === 'Input.dispatchKeyEvent');
+    assert.deepEqual(keys.map(c => c.params.type), ['keyDown', 'keyUp']);
+    assert(keys.every(c => c.sessionId === 'only-session'));
+    assert.equal(keys[1]!.params.text, undefined);
+    assert.equal(f.cdp.closed, true);
+    assert(f.hostCalls.some(c => c.name === 'browser.invalidate'));
+    await assert.rejects(f.session.act({ action: 'press', ref: f.cdp.refs + '1', key: 'Space' }));
+    assert.equal(f.connects(), 1); await f.session.dispose();
+  }
+});
+
+test("reader disposal waits for key release instead of detaching an active key pair", async () => {
+  const f = fixture(); await f.session.snapshot();
+  let release!: () => void, started!: () => void;
+  const began = new Promise<void>(resolve => { started = resolve; });
+  f.cdp.afterKeyDown = () => { started(); return new Promise<void>(resolve => { release = resolve; }); };
+  const action = f.session.act({ action: 'press', ref: f.cdp.refs + '1', key: 'Space' });
+  const rejected = assert.rejects(action);
+  await began;
+  const disposed = f.session.dispose();
+  assert.equal(f.cdp.closed, false);
+  assert(!f.cdp.calls.some(c => c.method === 'Target.detachFromTarget'));
+  release(); await rejected; await disposed;
+  assert.deepEqual(f.cdp.calls.filter(c => c.method === 'Input.dispatchKeyEvent').map(c => c.params.type), ['keyDown', 'keyUp']);
+  assert.equal(f.cdp.closed, true);
+});
+
+test("socket loss after key-down is uncertain and never reconnects or replays", async () => {
+  const f = fixture(); await f.session.snapshot();
+  f.cdp.afterKeyDown = () => f.cdp.close();
+  await assert.rejects(f.session.act({ action: 'press', ref: f.cdp.refs + '1', key: 'Space' }), /browser_disconnected/);
+  assert(f.hostCalls.some(c => c.name === 'browser.invalidate'));
+  await assert.rejects(f.session.act({ action: 'press', ref: f.cdp.refs + '1', key: 'Space' }));
+  assert.equal(f.connects(), 1);
+  assert.deepEqual(f.cdp.calls.filter(c => c.method === 'Input.dispatchKeyEvent').map(c => c.params.type), ['keyDown']);
+  await f.session.dispose();
 });
 
 test("sibling actions serialize and cannot consume the same snapshot twice", async () => {

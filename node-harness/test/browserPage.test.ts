@@ -9,6 +9,8 @@ function page() {
     nodeType = 1; tagName: string; attributes: Record<string, string>; childNodes: any[] = [];
     parentElement: Element | null = null; isConnected = true; isContentEditable = false; readOnly = false; isDisabled = false;
     value = ""; textContent = ""; innerText = ""; labels: any[] = []; id = ""; clicked = 0; terminal = false;
+    selectionStart: number | null = 0; selectionEnd: number | null = 0;
+    root?: any; afterSelect?: () => void;
     rect = { left: 10, top: 10, right: 210, bottom: 50, width: 200, height: 40 };
     constructor(tag: string, attributes: Record<string, string> = {}) { this.tagName = tag; this.attributes = attributes; }
     get type() { return this.attributes.type ?? "text"; }
@@ -28,11 +30,11 @@ function page() {
       return null;
     }
     getBoundingClientRect() { return this.rect; }
-    getRootNode() { return doc; }
+    getRootNode() { return this.root ?? doc; }
     contains(other: Element) { return this === other || this.childNodes.some(e => e === other); }
     click() { this.clicked++; }
-    focus() { doc.activeElement = this; }
-    select() {}
+    focus() { (this.root ?? doc).activeElement = this; }
+    select() { this.selectionStart = 0; this.selectionEnd = this.value.length; this.afterSelect?.(); }
     scrollBy() {}
   }
   class Input extends Element { constructor(attributes: Record<string, string>) { super('INPUT', attributes); } }
@@ -45,7 +47,8 @@ function page() {
   button.parentElement = article; article.childNodes = [button]; article.parentElement = body;
   input.parentElement = body; password.parentElement = body; body.childNodes = [article, input, password];
   let covered = false;
-  doc = { body, scrollingElement: body, visibilityState: 'visible', activeElement: null, getElementById: () => null, elementFromPoint: () => covered ? body : button };
+  doc = { body, scrollingElement: body, visibilityState: 'visible', activeElement: null, hasFocus: () => true,
+    getElementById: () => null, elementFromPoint: () => covered ? body : button };
   const context: any = { document: doc, Element, HTMLElement: Element, HTMLInputElement: Input, HTMLTextAreaElement: TextArea,
     getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }), innerWidth: 800, innerHeight: 600,
     location: { href: 'https://fixture.test/' }, URL };
@@ -161,6 +164,59 @@ test("multiline fill rejects single-line fields before focus and permits multili
   p.input.isContentEditable = true;
   const fresh = p.helper.snapshot('', 'new-'), newRef = /^\[([^\]]+)\] textbox/m.exec(fresh.text)![1]!;
   assert.equal(p.helper.inspect(newRef, 'fill', undefined, false, 'first\nsecond').ok, true);
+});
+
+test("focused checks reject ordinary/password recipients, lost page focus and stale selection", () => {
+  const p = page(); p.input.value = 'existing'; p.doc.elementFromPoint = () => p.input;
+  const ref = /^\[([^\]]+)\] textbox/m.exec(p.helper.snapshot('', 'x-').text)![1]!;
+  assert.equal(p.helper.act(ref, 'fill').ok, true);
+  assert.equal(p.helper.inspectFocused(ref, 'fill').ok, true);
+  for (const recipient of [p.button, p.password]) {
+    p.doc.activeElement = recipient;
+    assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+    assert.equal(p.helper.inspectFocused(ref, 'press', 'Enter').error, 'browser_focus_failed');
+  }
+  p.doc.activeElement = p.input;
+  p.input.selectionStart = 2;
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+  p.input.selectionStart = 0; p.input.selectionEnd = 3;
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+  p.input.selectionEnd = p.input.value.length;
+  p.doc.hasFocus = () => false;
+  assert.equal(p.helper.inspectFocused(ref, 'press', 'Enter').error, 'browser_focus_failed');
+  p.doc.hasFocus = () => true;
+  p.input.selectionStart = p.input.selectionEnd = null;
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_unsupported_action');
+});
+
+test("selection handlers cannot redirect focus before input preparation finishes", () => {
+  const p = page(); p.doc.elementFromPoint = () => p.input;
+  const ref = /^\[([^\]]+)\] textbox/m.exec(p.helper.snapshot('', 'x-').text)![1]!;
+  p.input.afterSelect = () => { p.doc.activeElement = p.password; };
+  assert.equal(p.helper.act(ref, 'fill').error, 'browser_focus_failed');
+  assert.equal(p.password.value, 'do-not-expose-this');
+});
+
+test("focused checks validate shadow hosts and contenteditable replacement ranges", () => {
+  const p = page(); p.doc.elementFromPoint = () => p.input;
+  const host = p.body;
+  p.input.root = { host, activeElement: p.input };
+  p.doc.activeElement = host;
+  let boundaries = [0, 0];
+  const selection = { rangeCount: 1, getRangeAt: () => ({ compareBoundaryPoints: (side: number) => boundaries[side === 0 ? 0 : 1] }) };
+  p.input.root.getSelection = () => selection;
+  p.doc.createRange = () => ({ selectNodeContents() {} });
+  p.input.isContentEditable = true;
+  const ref = /^\[([^\]]+)\] textbox/m.exec(p.helper.snapshot('', 'x-').text)![1]!;
+  assert.equal(p.helper.inspectFocused(ref, 'fill').ok, true);
+  boundaries = [0, 1];
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+  boundaries = [1, 0];
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+  boundaries = [0, 0]; selection.rangeCount = 0;
+  assert.equal(p.helper.inspectFocused(ref, 'fill').error, 'browser_focus_failed');
+  selection.rangeCount = 1; p.doc.activeElement = p.password;
+  assert.equal(p.helper.inspectFocused(ref, 'press', 'Enter').error, 'browser_focus_failed');
 });
 
 test("ordinary text editing stays allowed but Delete outside an editable field is refused", () => {

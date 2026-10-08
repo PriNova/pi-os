@@ -96,6 +96,27 @@ export const PAGE_SCRIPT = String.raw`(() => {
     if(action==='fill' && e.closest('.xterm,[data-terminal]') && /(?:^|[;&|\u0060(\n])\s*(?:(?:sudo|command)\s+)*(?:[\w/.-]*\/)?(?:rm|rmdir|unlink|trash|remove-item|del|erase)(?:\s|$)|\bfind\b[^\n]*\s-delete\b|\b(?:shutil\s*\.\s*rmtree|os\s*\.\s*(?:remove|unlink|rmdir)|fs\s*\.\s*(?:unlink|rm|rmdir)(?:Sync)?)\s*\(/im.test(inputText))return {error:'file_deletion_blocked'};
     return {ok:true};
   }
+  function inspectFocused(id,action,key,allowCredentialFields=false,inputText='') {
+    const checked=inspect(id,action,key,allowCredentialFields,inputText); if(!checked.ok)return checked;
+    const e=refs.get(id).e;
+    if(!document.hasFocus())return {error:'browser_focus_failed'};
+    // Check every shadow host as well as the field, not only its local root.
+    for(let node=e;node;){const root=node.getRootNode();if(root.activeElement!==node)return {error:'browser_focus_failed'};node=root.host || null}
+    if(action==='fill'){
+      if(e.isContentEditable){
+        const selection=e.getRootNode().getSelection?.() || document.getSelection();
+        if(!selection || selection.rangeCount!==1)return {error:'browser_focus_failed'};
+        const expected=document.createRange();expected.selectNodeContents(e);
+        const actual=selection.getRangeAt(0);
+        if(actual.compareBoundaryPoints(0,expected)!==0 || actual.compareBoundaryPoints(2,expected)!==0)return {error:'browser_focus_failed'};
+      }else{
+        // Some input types cannot expose a replacement selection. Do not append blindly.
+        if(e.selectionStart===null || e.selectionEnd===null)return {error:'browser_unsupported_action'};
+        if(e.selectionStart!==0 || e.selectionEnd!==e.value.length)return {error:'browser_focus_failed'};
+      }
+    }
+    return {ok:true};
+  }
   function act(id,action,key,dy,allowCredentialFields=false,inputText='') {
     const checked=inspect(id,action,key,allowCredentialFields,inputText); if(!checked.ok)return checked;
     const e=refs.get(id).e;
@@ -104,13 +125,14 @@ export const PAGE_SCRIPT = String.raw`(() => {
       e.focus({preventScroll:true});
       if((e.getRootNode().activeElement||document.activeElement)!==e)return {error:'browser_focus_failed'};
       if(action==='fill'){
-        if(e.isContentEditable){const r=document.createRange();r.selectNodeContents(e);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+        if(e.isContentEditable){const r=document.createRange();r.selectNodeContents(e);const s=e.getRootNode().getSelection?.() || document.getSelection();if(!s)return {error:'browser_focus_failed'};s.removeAllRanges();s.addRange(r)}
         else if(typeof e.select==='function')e.select();else return {error:'browser_unsupported_action'};
       }
+      return inspectFocused(id,action,key,allowCredentialFields,inputText);
     }
     if(action==='scroll')e.scrollBy({top:dy,behavior:'instant'});
     return {ok:true};
   }
   function verifyFill(id,expected,allowCredentialFields=false){const e=refs.get(id)?.e;if(!e||!e.isConnected||(credential(e)&&allowCredentialFields!==true))return false;return (e.isContentEditable?e.textContent:e.value)===expected}
-  globalThis.__piBrowser={snapshot,inspect,act,verifyFill,clear:()=>refs.clear()};
+  globalThis.__piBrowser={snapshot,inspect,inspectFocused,act,verifyFill,clear:()=>refs.clear()};
 })()`;

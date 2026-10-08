@@ -17,6 +17,19 @@ export interface Cdp {
   onEvent(listener: (method: string, params: any, sessionId?: string) => void): void;
   close(): void;
 }
+/** Once down may be sent, attempt release on the same connection before honoring cancellation.
+ * Each leg is bounded independently. A lost socket cannot be repaired or replayed. */
+export async function dispatchKeyPair(client: Cdp, params: Record<string, unknown>, sessionId: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  try {
+    await client.call("Input.dispatchKeyEvent", { type: "keyDown", ...params }, sessionId, AbortSignal.timeout(1500));
+  } finally {
+    const { text: _text, ...release } = params;
+    await client.call("Input.dispatchKeyEvent", { type: "keyUp", ...release }, sessionId, AbortSignal.timeout(1500));
+  }
+  signal?.throwIfAborted();
+}
+
 interface Socket extends EventEmitter { readyState: number; send(data: string): void; terminate(): void; close(): void }
 const require = createRequire(import.meta.url);
 const SocketClass = require("ws") as new (url: string, options: Record<string, unknown>) => Socket;
