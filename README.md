@@ -1,6 +1,6 @@
 # pi-os
 
-An OS-level AI layer for Windows: press a global hotkey in **any** application,
+An OS-level AI layer for Windows, with a draft native macOS port: press a global hotkey in **any** application,
 type an instruction, and a [pi](https://github.com/earendil-works/pi) agent
 already knows what you were looking at and has tools to act on it.
 
@@ -28,11 +28,27 @@ The core split:
 - Everything rapidly changing lives on the node side or in sidecars — the host
   stays small.
 
+## macOS (draft port)
+
+[`host-macos/`](host-macos/README.md) implements the same host/harness split with
+Swift/AppKit, AX, ScreenCaptureKit and native input. **Control+Option+Command+Space**
+opens a native bottom-centered Whisper bar; a persistent reader supports sequential
+follow-ups. Appearance presets are independent of permissions and pinned authority.
+The existing Windows host/input fixes remain intact.
+
+See [build/use instructions](host-macos/README.md),
+[architecture and simplification review](host-macos/ARCHITECTURE.md) and
+[acceptance/remaining gates](host-macos/ACCEPTANCE.md). This is not full parity or a
+notarized distribution. Isolated Mac tools, optional explicitly consented Brave CDP,
+credential opt-in and deletion heuristics have deliberately bounded guarantees;
+trusted global extensions are arbitrary code, not sandboxed.
+
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
 | `host-dotnet/` | C# solution: `WindowsHarness.Host` (WPF background app) + `WindowsHarness.Contracts` (shared schema types) |
+| `host-macos/` | Swift/AppKit native host, dependency-free Swift package, fixtures and packaging recipes (draft) |
 | `node-harness/` | Node service: HTTP server on port 17832, pi SDK agent sessions, desktop tool wrappers |
 | `shared/schemas/` | Canonical TypeScript types for the context snapshot (`desktop-context.ts`) |
 | `shared/protocol/` | The localhost HTTP contract (`protocol.md`) — ports, endpoints, error model |
@@ -49,7 +65,7 @@ refreshing the installed application.
 2. Press **Ctrl+Alt+Space**.
 3. Type an instruction, press **Enter**. The overlay closes instantly and
    focus returns to your app.
-4. The harness logs show the pinned snapshot, then the agent's answer.
+4. The persistent reader shows the answer and accepts sequential follow-ups. Logs omit prompt/snapshot contents.
 
 A pi session receives the context summary and screenshot. It can observe the
 captured window and use `desktop_act` to focus, click, type, press supported

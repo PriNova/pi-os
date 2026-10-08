@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { supportDirectory } from "./platformPaths.js";
 
 /**
  * Environment-driven configuration for the node harness.
@@ -17,6 +17,10 @@ export interface HarnessConfig {
   invokeTimeoutMs: number;
   /** Trusted directory where the C# host writes screenshots. */
   capturesDir: string;
+  /** Explicit read-only mode; Mac additionally negotiates native input availability per invocation. */
+  readOnly?: boolean;
+  /** Explicit opt-out for isolated split development only. */
+  insecureDev?: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): HarnessConfig {
@@ -26,8 +30,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): HarnessConfig 
     hostToken: env.PI_OS_TOKEN,
     agentEnabled: parseAgentEnabled(env.PI_OS_AGENT),
     invokeTimeoutMs: parseTimeoutMs(env.PI_OS_INVOKE_TIMEOUT_MS),
-    capturesDir: env.PI_OS_CAPTURES_DIR
-      ?? join(env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "pi-os", "captures"),
+    capturesDir: env.PI_OS_CAPTURES_DIR ?? join(supportDirectory(env), "captures"),
+    readOnly: env.PI_OS_READ_ONLY === "1",
+    insecureDev: env.PI_OS_INSECURE_DEV === "1" && env.PI_OS_SUPERVISED !== "1",
   };
 }
 

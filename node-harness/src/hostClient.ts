@@ -31,7 +31,10 @@ export interface WindowContext {
   commandLine?: string;
   title: string;
   className?: string;
+  surface?: "finderDesktop";
+  desktopWorkArea?: Rect;
   shellFolderPath?: string;
+  documentPath?: string;
   bounds: Rect;
   monitorId?: string;
   dpi?: number;
@@ -53,6 +56,8 @@ export interface DesktopContextSnapshot {
   selectedDesktopItemCount?: number;
   selectedDesktopItemsTruncated?: boolean;
   screenshot?: ScreenshotRef | null;
+  /** Selected native Brave tab pinned before the panel; no endpoint/capability exposed. */
+  browser?: { name: "Brave"; mode: "cdp"; pinned: boolean };
   monitors: MonitorSummary[];
 }
 
@@ -88,6 +93,8 @@ export interface ScreenshotRef {
   filePath?: string;
   imageId?: string;
   bounds?: Rect;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
 interface ToolResponsePayload {
@@ -133,6 +140,16 @@ export class HostClient {
         message: typeof payload.error?.message === "string" ? payload.error.message : "Unknown host error",
       },
     };
+  }
+
+  async getToolNames(signal?: AbortSignal): Promise<string[]> {
+    const headers: Record<string, string> = {};
+    if (this.config.hostToken) headers["X-Harness-Token"] = this.config.hostToken;
+    const response = await fetch(`${this.config.hostBaseUrl}/tools`, { headers, signal });
+    if (!response.ok) throw new Error(`Host returned HTTP ${response.status} for tool discovery`);
+    const body = await response.json() as { tools?: { name?: unknown }[] };
+    if (!Array.isArray(body.tools)) throw new Error("Invalid host tool catalog");
+    return body.tools.flatMap(tool => typeof tool.name === "string" ? [tool.name] : []);
   }
 
   getSnapshot(contextId: string, signal?: AbortSignal): Promise<ToolOutcome<DesktopContextSnapshot>> {

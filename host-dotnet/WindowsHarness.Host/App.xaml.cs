@@ -72,7 +72,7 @@ public partial class App : Application
             _tray = new TrayService();
             _tray.SettingsRequested += (_, _) => _dispatcher?.BeginInvoke(ShowSettings);
 
-            var apiServer = new HostApiServer(_store, _pipeline);
+            var apiServer = new HostApiServer(_store, _pipeline, _supervisor.Token);
             _apiServerTask = Task.Run(apiServer.Run);
 
             // O.3: one launch covers C# + node; the child dies with us.
@@ -218,7 +218,7 @@ public partial class App : Application
                 {
                     var done = string.IsNullOrEmpty(status.ResponseText) ? "(no response text)" : status.ResponseText!;
                     _tray?.ShowToast("pi-os — done", FirstLine(done),
-                        () => overlay.ReopenReader(done, failure: false));
+                        () => overlay.ReopenReader(done, failure: false, status.FollowupAvailable));
                 }
                 else
                 {
@@ -233,15 +233,15 @@ public partial class App : Application
                 var answer = string.IsNullOrEmpty(status.ResponseText)
                     ? "(no response text)"
                     : status.ResponseText!;
-                overlay.ShowAnswer(answer);
+                overlay.ShowAnswer(answer, status.FollowupAvailable);
             }
             else if (status.State == "aborted" || status.State == "timed_out")
             {
-                overlay.ReenterReaderAfterFailedFollowup(status.State == "aborted" ? "canceled — type a follow-up to retry" : "timed out — type a follow-up to retry");
+                overlay.ReenterReaderAfterFailedFollowup(status.State == "aborted" ? "canceled — start a new task" : "timed out — start a new task", status.FollowupAvailable);
             }
             else
             {
-                overlay.ReenterReaderAfterFailedFollowup(FirstLine(status.FailureMessage ?? "follow-up failed — try again"));
+                overlay.ReenterReaderAfterFailedFollowup(FirstLine(status.FailureMessage ?? "follow-up failed — try again"), status.FollowupAvailable);
             }
         });
     }
@@ -257,11 +257,11 @@ public partial class App : Application
                 if (dismissed)
                 {
                     _tray?.ShowToast("pi-os — done", FirstLine(answer),
-                        () => overlay.ReopenReader(answer, failure: false));
+                        () => overlay.ReopenReader(answer, failure: false, status.FollowupAvailable));
                 }
                 else
                 {
-                    overlay.ShowAnswer(answer);
+                    overlay.ShowAnswer(answer, status.FollowupAvailable);
                 }
                 break;
 

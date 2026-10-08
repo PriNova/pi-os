@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
+using WindowsHarness.Host.Http;
 using WindowsHarness.Host.Diagnostics;
 
 namespace WindowsHarness.Host.Supervisor;
@@ -23,7 +23,10 @@ internal sealed class NodeSupervisor : IDisposable
     private bool _disposed;
 
     /// <summary>Token the child must send as X-Harness-Token (protocol.md).</summary>
-    public string Token { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    public string Token { get; } = LocalAuthentication.SessionToken(
+        Environment.GetEnvironmentVariable("PI_OS_TOKEN"),
+        Environment.GetEnvironmentVariable("PI_OS_SUPERVISOR") != "0",
+        Environment.GetEnvironmentVariable("PI_OS_INSECURE_DEV") == "1");
 
     public NodeSupervisor()
     {

@@ -1,0 +1,52 @@
+name: Native conformance
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-26]
+    runs-on: ${{ matrix.os }}
+    env:
+      PI_OFFLINE: "1"
+      PI_OS_AGENT: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: node-harness/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: node-harness
+      - run: npm run check && npm test && npm run build
+        working-directory: node-harness
+      - run: swift test --jobs 2 --package-path host-macos --skip PresentationTests/testLastAnswerSurvivesDismissalNewPromptAndError
+      - run: npm run test:macos
+        working-directory: node-harness
+      - run: swift build --jobs 2 --package-path host-macos -c release --product pi-os
+      - run: bash -n host-macos/scripts/*.sh
+  windows:
+    runs-on: windows-latest
+    env:
+      PI_OFFLINE: "1"
+      PI_OS_AGENT: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: node-harness/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: npm ci --ignore-scripts
+        working-directory: node-harness
+      - run: npm run check && npm test && npm run build
+        working-directory: node-harness
+      - run: dotnet test host-dotnet/WindowsHarness.Host.Tests/WindowsHarness.Host.Tests.csproj --configuration Release

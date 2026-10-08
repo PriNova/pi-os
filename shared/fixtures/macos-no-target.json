@@ -1,0 +1,9 @@
+{
+  "id": "ctx-no-target",
+  "capturedAt": "2026-09-15T10:00:00Z",
+  "cursor": {"x": 300, "y": 200},
+  "foregroundWindow": null,
+  "windowUnderCursor": null,
+  "targetWindow": null,
+  "monitors": [{"id": "1", "isPrimary": true, "bounds": {"x": 0, "y": 0, "width": 1728, "height": 1117}, "workArea": {"x": 0, "y": 32, "width": 1728, "height": 1047}}]
+}

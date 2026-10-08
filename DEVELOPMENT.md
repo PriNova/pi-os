@@ -1,13 +1,14 @@
 # Development
 
-This project has a C# Windows host and a Node.js agent harness. The host owns
-the desktop UI and native Windows operations. The Node harness runs the pi
-agent and its tools.
+This project has native C# Windows and draft Swift/AppKit macOS hosts and a
+shared Node.js agent harness. Each host owns desktop UI and OS operations; Node
+owns the pi conversation and normalized tools. Mac build/install, signing and
+acceptance details are in [`host-macos/README.md`](host-macos/README.md).
 
 ## Prerequisites
 
 - .NET SDK 10
-- Node.js 22 or later
+- Node.js 24 or later
 - pi authentication through `pi /login` or a provider API key
 
 Install the Node dependencies once:
@@ -53,8 +54,10 @@ cd host-dotnet/WindowsHarness.Host
 dotnet run
 ```
 
-Leave `PI_OS_TOKEN` unset in this workflow. The local services then use their
-development mode without token validation.
+Set the **same nonempty `PI_OS_TOKEN` in both terminals** before starting either
+process. Split development fails closed without it. `PI_OS_INSECURE_DEV=1` in both
+processes is an explicit isolated-development opt-out, never the production default.
+The normal supervised workflow generates and passes a shared token automatically.
 
 ## Tests
 
@@ -93,7 +96,8 @@ values.
 
 | Variable | Purpose |
 |----------|---------|
-| `PI_OS_TOKEN` | Internal authentication token shared by the two processes. The supervisor generates and passes it automatically. Leave it unset during normal and split development. |
+| `PI_OS_TOKEN` | Shared authentication token. Generated automatically by the supervisor; set the same nonempty value in both processes for split development. |
+| `PI_OS_INSECURE_DEV` | Explicit split-development auth opt-out (`1`), not a production default. |
 | `PI_OS_HOTKEY` | Overrides the global hotkey, for example `Ctrl+Shift+F9` (default `Ctrl+Alt+Space`). |
 | `PI_OS_AGENT` | Set to `0` or `false` to use deterministic test mode without LLM calls. The agent is enabled by default. |
 | `PI_OS_NODE_PORT` | Changes the Node harness listening port (default `17832`). Also set `PI_OS_NODE_URL` to the matching address for the C# host. |

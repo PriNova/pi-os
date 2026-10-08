@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -7,7 +7,7 @@ import { createComputerUseExtension, validateDesktopAction } from "../src/agent/
 import { MAX_SCREENSHOT_BYTES, loadScreenshotImage } from "../src/agent/screenshotImage.js";
 import type { HostClient } from "../src/hostClient.js";
 
-const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+const png = await readFile(new URL("../../shared/fixtures/captures/window.png", import.meta.url));
 
 function register(fakeInvoke: (...args: any[]) => any, captureDir = "C:/captures") {
   const tools = new Map<string, any>();
