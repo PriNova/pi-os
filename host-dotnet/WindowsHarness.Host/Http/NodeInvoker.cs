@@ -62,7 +62,7 @@ public sealed class NodeInvoker
 
     /// <summary>Submits the invocation. Returns the invocation id on
     /// acceptance, null when the harness rejected or could not be reached.</summary>
-    public async Task<string?> SendInvocationAsync(DesktopContextSnapshot snapshot, string prompt)
+    public async Task<string?> SendInvocationAsync(DesktopContextSnapshot snapshot, string prompt, bool includeScreenshot = true)
     {
         var payload = new
         {
@@ -71,6 +71,7 @@ public sealed class NodeInvoker
             prompt,
             invokedAt = DateTimeOffset.UtcNow,
             retainSession = true,
+            includeScreenshot,
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "/invoke")

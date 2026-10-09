@@ -29,6 +29,7 @@ interface InvokeBody {
   prompt?: unknown;
   invokedAt?: unknown;
   retainSession?: unknown;
+  includeScreenshot?: unknown;
 }
 
 export interface HarnessServerOptions {
@@ -199,7 +200,8 @@ export class HarnessServer {
 
     const { contextId, prompt } = body;
     if (typeof contextId !== "string" || typeof prompt !== "string" || !prompt.trim() || prompt.length > 20_000
-      || (body.retainSession !== undefined && typeof body.retainSession !== "boolean")) {
+      || (body.retainSession !== undefined && typeof body.retainSession !== "boolean")
+      || (body.includeScreenshot !== undefined && typeof body.includeScreenshot !== "boolean")) {
       return void this.json(response, 400, {
         error: { code: "invalid_arguments", message: "contextId (string) and prompt (non-empty string) are required" },
       });
@@ -222,6 +224,7 @@ export class HarnessServer {
       prompt,
       typeof body.invokedAt === "string" ? body.invokedAt : new Date().toISOString(),
       typeof body.invocationId === "string" ? body.invocationId : undefined,
+      body.includeScreenshot !== false,
     );
 
     if (body.retainSession === true) this.threads.set(record.invocationId, { expires: (this.options.now?.() ?? Date.now()) + THREAD_TTL_MS });
@@ -435,6 +438,7 @@ export class HarnessServer {
       hostClient,
       contextId: record.contextId,
       prompt: record.prompt,
+      includeScreenshot: record.includeScreenshot,
       snapshot: snapshot as DesktopContextSnapshot & { screenshot?: ScreenshotRef | null },
       capturesDir: this.config.capturesDir,
       readOnly,

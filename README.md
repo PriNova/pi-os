@@ -63,11 +63,15 @@ refreshing the installed application.
 
 1. Focus any desktop app (Notepad, Explorer, ...).
 2. Press **Ctrl+Alt+Space**.
-3. Type an instruction, press **Enter**. The overlay closes instantly and
+3. Type an instruction. On Windows, **Include screenshot** is on by default;
+   switch it off to omit the initial image attachment. Press **Enter**. The overlay closes instantly and
    focus returns to your app.
 4. The persistent reader shows the answer and accepts sequential follow-ups. Logs omit prompt/snapshot contents.
 
-A pi session receives the context summary and screenshot. It can observe the
+A pi session receives the context summary and, by default, a screenshot. The
+Windows switch controls only the initial attachment: local capture and later
+agent screenshot tools remain enabled. Each new prompt starts with the switch on.
+It can observe the
 captured window and use `desktop_act` to focus, click, type, press supported
 keys or shortcuts, and scroll. Safe action traces are written to
 `logs\host.log`; typed content is never logged. Agent mode requires pi

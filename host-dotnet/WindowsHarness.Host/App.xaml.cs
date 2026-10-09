@@ -125,7 +125,7 @@ public partial class App : Application
             // The overlay persists as the status pill while the agent runs.
             overlay.EnterPillMode();
             _invocationActive = true;
-            _ = TrackInvocationAsync(overlay, snapshot, submitTcs.Task.Result);
+            _ = TrackInvocationAsync(overlay, snapshot, submitTcs.Task.Result, overlay.IncludeScreenshot);
         }
         finally
         {
@@ -137,7 +137,7 @@ public partial class App : Application
     /// activity into the pill label, then surface the terminal result
     /// (reader popup inline, or toast when the user dismissed the pill).</summary>
     private async Task TrackInvocationAsync(
-        OverlayWindow overlay, DesktopContextSnapshot snapshot, string prompt)
+        OverlayWindow overlay, DesktopContextSnapshot snapshot, string prompt, bool includeScreenshot)
     {
         var dismissed = false;
         try
@@ -151,7 +151,7 @@ public partial class App : Application
 
             overlay.DismissRequested += () => dismissed = true;
 
-            var invocationId = await invoker.SendInvocationAsync(snapshot, prompt);
+            var invocationId = await invoker.SendInvocationAsync(snapshot, prompt, includeScreenshot);
             if (invocationId is null)
             {
                 _tray?.ShowToast("pi-os — harness unreachable", "Could not submit the invocation.");

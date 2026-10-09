@@ -34,6 +34,8 @@ export interface AgentRunOptions {
   hostClient: HostClient;
   contextId: string;
   prompt: string;
+  /** Defaults to true; does not restrict later screenshot tools. */
+  includeScreenshot?: boolean;
   snapshot: DesktopContextSnapshot & { screenshot?: ScreenshotRef | null };
   capturesDir: string;
   log: (line: string) => void;
@@ -127,7 +129,7 @@ export async function createLiveSession(options: AgentRunOptions): Promise<LiveA
 
   if (signal?.aborted) throw abortError(signal);
   const isolated = effectiveResourceMode(process.platform, readOnly, options.resourceSelection) === "isolated";
-  const extension = createComputerUseExtension(contextId, hostClient, capturesDir, readOnly, process.platform, snapshot.screenshot?.imageId, browser);
+  const extension = createComputerUseExtension(contextId, hostClient, capturesDir, readOnly, process.platform, options.includeScreenshot === false ? undefined : snapshot.screenshot?.imageId, browser);
   const loader = await loadAgentResources(extension, process.cwd(), getAgentDir(), isolated);
 
   const modelRuntime = await ModelRuntime.create();
@@ -183,6 +185,7 @@ export async function promptFirst(live: LiveAgentSession, options: AgentRunOptio
   const userMessage = [
     "## Desktop context (target identity pinned before the prompt appeared)",
     summarizeSnapshot(snapshot),
+    ...(options.includeScreenshot === false ? ["The user disabled the initial screenshot attachment. No image is attached; screenshot tools remain available if needed."] : []),
     "",
     ...(!isolated && process.platform === "darwin" ? ["## Trusted pi compatibility", TRUST_WARNING,
       "Desktop tool refusals must not be bypassed through another input path.", ""] : []),
@@ -191,7 +194,7 @@ export async function promptFirst(live: LiveAgentSession, options: AgentRunOptio
   ].join("\n");
 
   if (signal?.aborted) throw abortError(signal);
-  const image = snapshot.screenshot?.filePath
+  const image = options.includeScreenshot !== false && snapshot.screenshot?.filePath
     ? await loadScreenshotImage(snapshot.screenshot.filePath, capturesDir) : undefined;
   return live.prompt(userMessage, signal, image);
 }

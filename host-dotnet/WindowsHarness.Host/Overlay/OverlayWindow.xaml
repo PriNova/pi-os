@@ -59,16 +59,63 @@
     <Grid>
         <!-- Prompt mode: initial capture-then-prompt surface -->
         <Border x:Name="PromptPanel" Background="#F2222222" CornerRadius="8" Padding="12"
-                BorderBrush="#44444444" BorderThickness="1">
+                BorderBrush="#44444444" BorderThickness="1" PreviewKeyDown="OnPromptKeyDown">
             <StackPanel>
                 <TextBlock x:Name="TargetLabel" Foreground="#FF9E9E9E" FontSize="11"
                            Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
                 <TextBox x:Name="PromptBox" FontSize="15" Padding="6"
                          Background="#FF111111" Foreground="#FFEAEAEA"
-                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
-                         KeyDown="OnPromptKeyDown"/>
-                <TextBlock Foreground="#FF707070" FontSize="10.5" Margin="2,6,0,0"
-                           Text="Enter: submit&#160;&#160;&#160;Esc: cancel"/>
+                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"/>
+                <DockPanel Margin="2,6,0,0">
+                    <ToggleButton x:Name="ScreenshotToggle" DockPanel.Dock="Right" IsChecked="True"
+                                  Padding="8,3" FontSize="10.5" Cursor="Hand"
+                                  ToolTip="Include the screenshot with the initial prompt only. Local capture and later screenshot tools stay enabled.">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Content" Value="Include screenshot: off"/>
+                                <Setter Property="Background" Value="#FF333333"/>
+                                <Setter Property="Foreground" Value="#FFEAEAEA"/>
+                                <Setter Property="BorderBrush" Value="#FF555555"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <!-- Own the chrome so the Windows theme cannot replace checked colors. -->
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="ToggleBorder" CornerRadius="4"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#FF9E9E9E"/>
+                                                </Trigger>
+                                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                                    <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#FFEAEAEA"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.8"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Content" Value="Include screenshot: on"/>
+                                        <Setter Property="Background" Value="#FF24545C"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <TextBlock Foreground="#FF707070" FontSize="10.5" VerticalAlignment="Center"
+                               Text="Enter: submit&#160;&#160;&#160;Esc: cancel"/>
+                </DockPanel>
             </StackPanel>
         </Border>
 

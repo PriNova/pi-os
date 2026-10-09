@@ -8,17 +8,21 @@ import { resolve, join } from "node:path";
 import { loadAgentResources, registerResourceProviders } from "../src/agent/resources.js";
 import { HarnessServer } from "../src/server.js";
 import { loadConfig } from "../src/config.js";
-import type { HostClient } from "../src/hostClient.js";
+import type { HostClient, DesktopContextSnapshot } from "../src/hostClient.js";
+import type { ImageContent } from "@earendil-works/pi-ai";
+import { readFile } from "node:fs/promises";
 import { LiveAgentSession, type SessionTransport } from "../src/agent/liveSession.js";
 import { promptFollowup } from "../src/agent/agentRunner.js";
 
 class FixtureSession implements SessionTransport {
   listener?: (event: AgentSessionEvent) => void;
   history: string[] = []; disposed = 0; aborted = 0;
+  images: (ImageContent[] | undefined)[] = [];
   hold?: Promise<void>; release?: () => void; fail = false;
   subscribe(listener: (event: AgentSessionEvent) => void) { this.listener = listener; return () => { this.listener = undefined; }; }
-  async prompt(text: string) {
+  async prompt(text: string, options?: { images?: ImageContent[] }) {
     this.history.push(text);
+    this.images.push(options?.images);
     if (this.hold) await this.hold;
     this.listener?.({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: `Answer ${this.history.length}` }], stopReason: this.fail ? "error" : "stop", ...(this.fail ? { errorMessage: "fixture provider failure" } : {}) } } as AgentSessionEvent);
   }
@@ -27,14 +31,14 @@ class FixtureSession implements SessionTransport {
   pause() { this.hold = new Promise(resolve => { this.release = resolve; }); }
 }
 const snapshot = { id: "ctx-pinned", capturedAt: "fixture", targetWindow: null, foregroundWindow: null, windowUnderCursor: null, cursor: { x: 0, y: 0 }, monitors: [] };
-async function fixture(timeout = 0, startup?: Promise<void>) {
+async function fixture(timeout = 0, startup?: Promise<void>, pinned: DesktopContextSnapshot = snapshot) {
   const transports: FixtureSession[] = [];
   let unavailable = false, control = true, now = Date.now();
   const host = {
-    getSnapshot: async (id: string) => { assert.equal(id, "ctx-pinned"); return unavailable ? { ok: false, error: { code: "unknown_context", message: "revoked" } } : { ok: true, result: snapshot }; },
+    getSnapshot: async (id: string) => { assert.equal(id, "ctx-pinned"); return unavailable ? { ok: false, error: { code: "unknown_context", message: "revoked" } } : { ok: true, result: pinned }; },
     getToolNames: async () => control ? ["window.focus", "input.click", "input.typeText", "input.pressKey", "input.keyChord", "input.scroll"] : [],
   } as unknown as HostClient;
-  const server = new HarnessServer({ ...loadConfig({}), port: 0, hostToken: "fixture-token", agentEnabled: true, invokeTimeoutMs: timeout }, {
+  const server = new HarnessServer({ ...loadConfig({}), port: 0, hostToken: "fixture-token", agentEnabled: true, invokeTimeoutMs: timeout, capturesDir: resolve("../shared/fixtures/captures") }, {
     hostClient: host, now: () => now,
     createSession: async options => {
       if (startup) await startup;
@@ -78,6 +82,40 @@ test("sequential HTTP follow-ups reuse history/identity, reset results and close
     for (let i = 0; i < 2; i++) assert.equal((await f.request("/invocations/thread/close", {})).status, 200);
     assert.equal(session.disposed, 1);
     assert.equal((await f.request("/invocations/thread/followup", { prompt: "no resurrection" })).status, 404);
+  } finally { await f.server.close(); }
+});
+
+test("initial screenshot attachment defaults on, respects the switch, and does not affect follow-ups", async () => {
+  const filePath = resolve("../shared/fixtures/captures/window.png");
+  for (const includeScreenshot of [undefined, true, false]) {
+    const pinned = { ...snapshot, screenshot: { kind: "window", imageId: "image-fixture", filePath } };
+    const f = await fixture(0, undefined, pinned);
+    try {
+      assert.equal((await f.request("/invoke", { ...invoke, includeScreenshot })).status, 202);
+      assert.equal((await f.terminal()).state, "completed");
+      const transport = f.transports[0]!;
+      if (includeScreenshot === false) {
+        assert.equal(transport.images[0], undefined);
+        assert.match(transport.history[0]!, /No image is attached/);
+      } else {
+        assert.equal(transport.images[0]?.length, 1);
+        assert.equal(transport.images[0]?.[0]?.data, (await readFile(filePath)).toString("base64"));
+      }
+      assert.equal(pinned.screenshot.filePath, filePath, "The stored screenshot remains available to tools");
+      await f.request("/invocations/thread/followup", { prompt: "follow-up" });
+      assert.equal((await f.terminal()).state, "completed");
+      assert.equal(transport.images[1], undefined);
+    } finally { await f.server.close(); }
+  }
+});
+
+test("invalid screenshot attachment flags are rejected", async () => {
+  const f = await fixture();
+  try {
+    for (const includeScreenshot of [null, "false", 0]) {
+      assert.equal((await f.request("/invoke", { ...invoke, includeScreenshot })).status, 400);
+    }
+    assert.equal(f.transports.length, 0);
   } finally { await f.server.close(); }
 });
 

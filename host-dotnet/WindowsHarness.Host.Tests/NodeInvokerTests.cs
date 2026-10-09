@@ -27,6 +27,7 @@ public sealed class NodeInvokerTests
             if (paths.Count == 1)
             {
                 Assert.True(body.RootElement.GetProperty("retainSession").GetBoolean());
+                Assert.True(body.RootElement.GetProperty("includeScreenshot").GetBoolean());
                 Assert.Equal("ctx-fixture", body.RootElement.GetProperty("contextId").GetString());
                 invocationId = body.RootElement.GetProperty("invocationId").GetString();
                 return new HttpResponseMessage(HttpStatusCode.Accepted);
@@ -41,6 +42,22 @@ public sealed class NodeInvokerTests
         Assert.NotNull(id); Assert.Equal(invocationId, id);
         Assert.True(await invoker.SendFollowupAsync(id!, "Second question"));
         Assert.Equal(new[] { "/invoke", $"/invocations/{id}/followup" }, paths);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InitialScreenshotChoiceIsSentWithInvocation(bool includeScreenshot)
+    {
+        using var handler = new FixtureHandler(async request =>
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            Assert.Equal(includeScreenshot, body.RootElement.GetProperty("includeScreenshot").GetBoolean());
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        });
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://fixture.invalid") };
+        var snapshot = new DesktopContextSnapshot { Id = "ctx-fixture", CapturedAt = DateTimeOffset.UtcNow, Cursor = new Point2D { X = 0, Y = 0 } };
+        Assert.NotNull(await new NodeInvoker("fixture-token", client).SendInvocationAsync(snapshot, "Question", includeScreenshot));
     }
 
     [Theory]

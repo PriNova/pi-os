@@ -26,6 +26,8 @@ export interface InvocationRecord {
   contextId: string;
   prompt: string;
   invokedAt: string;
+  /** Attach the pinned screenshot to the initial prompt only. */
+  includeScreenshot: boolean;
   state: InvocationState;
   startedAt?: string;
   finishedAt?: string | null;
@@ -46,12 +48,13 @@ const MAX_RESPONSE_CHARS = 8_000;
 export class InvocationStore {
   private readonly records = new Map<string, InvocationRecord>();
 
-  create(contextId: string, prompt: string, invokedAt: string, invocationId = `inv-${randomUUID().replaceAll("-", "")}`): InvocationRecord {
+  create(contextId: string, prompt: string, invokedAt: string, invocationId = `inv-${randomUUID().replaceAll("-", "")}`, includeScreenshot = true): InvocationRecord {
     const record: InvocationRecord = {
       invocationId,
       contextId,
       prompt,
       invokedAt,
+      includeScreenshot,
       state: "queued",
       steps: [],
     };

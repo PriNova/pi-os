@@ -147,6 +147,8 @@ public partial class OverlayWindow : Window
     /// <summary>Non-null when the user submitted a prompt; null when cancelled.</summary>
     public string? SubmittedPrompt { get; private set; }
 
+    public bool IncludeScreenshot => ScreenshotToggle.IsChecked == true;
+
     public static OverlayWindow ShowFor(Contracts.DesktopContextSnapshot snapshot)
     {
         _ = snapshot.TargetWindow
