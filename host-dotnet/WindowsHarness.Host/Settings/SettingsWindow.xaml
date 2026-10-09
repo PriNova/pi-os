@@ -15,16 +15,37 @@
                       SelectionChanged="OnProviderChanged"/>
             <TextBlock Text="/" Foreground="#FF555555" FontSize="14"
                        VerticalAlignment="Center" Margin="6,0"/>
-            <ComboBox x:Name="ModelBox" Width="240" Padding="6"
-                      DisplayMemberPath="Name"
+            <ComboBox x:Name="ModelBox" Width="240" Padding="6" HorizontalContentAlignment="Stretch"
                       SelectionChanged="OnModelChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel LastChildFill="True">
+                            <Border x:Name="ImageBadge" DockPanel.Dock="Right" Visibility="Collapsed"
+                                    Margin="6,0,0,0" Padding="3,1" CornerRadius="3"
+                                    BorderBrush="#80808080" BorderThickness="1"
+                                    VerticalAlignment="Center" ToolTip="Supports image input">
+                                <TextBlock Text="IMG" FontSize="9"/>
+                            </Border>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding SupportsImages}" Value="True">
+                                <Setter TargetName="ImageBadge" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
                 <ComboBox.ItemContainerStyle>
                     <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="ToolTip" Value="{Binding Id}"/>
                     </Style>
                 </ComboBox.ItemContainerStyle>
             </ComboBox>
         </StackPanel>
+
+        <TextBlock x:Name="ImageSupportLabel" Foreground="#FF9E9E9E" FontSize="11" Margin="0,0,0,10"/>
 
         <TextBlock Text="Reasoning effort" Foreground="#FF9E9E9E" FontSize="11" Margin="0,0,0,4"/>
         <ComboBox x:Name="EffortBox" Width="180" HorizontalAlignment="Left" Padding="6"

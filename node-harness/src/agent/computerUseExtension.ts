@@ -115,7 +115,12 @@ export function createComputerUseExtension(
   browser?: BrowserSession,
 ) {
   let viewedScreenshotId = initialScreenshotId;
+  let supportsImages = true;
   return {
+    setImageSupport(supported: boolean) {
+      supportsImages = supported;
+      if (!supported) viewedScreenshotId = undefined;
+    },
     name: "pi-os-computer-use",
     invalidateScreenshot() { viewedScreenshotId = undefined; },
     factory(pi: ExtensionAPI) {
@@ -165,6 +170,7 @@ export function createComputerUseExtension(
         promptGuidelines: ["Use desktop_capture_window immediately before screenshot-relative clicks and after meaningful desktop actions."],
         parameters: Type.Object({}, { additionalProperties: false }),
         async execute(_id, _params, signal) {
+          if (!supportsImages) throw new Error("image_input_unsupported: The active model does not support screenshot attachments. Use text context instead.");
           const shot = await invoke<ScreenshotRef>("desktop.captureWindow", {}, signal);
           if (!shot.filePath) throw new Error("capture_failed: Host returned no screenshot file path");
           const image = await loadScreenshotImage(shot.filePath, captureDir);

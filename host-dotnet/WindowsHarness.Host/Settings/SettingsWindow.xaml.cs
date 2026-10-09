@@ -105,6 +105,7 @@ public partial class SettingsWindow : Window
     {
         if (ModelBox.SelectedItem is not ModelInfo model) return;
 
+        ImageSupportLabel.Text = model.SupportsImages ? "Image input: supported" : "Image input: not supported";
         _populating = true;
         EffortBox.ItemsSource = model.ThinkingLevels;
         var stored = _current?.ThinkingLevel;

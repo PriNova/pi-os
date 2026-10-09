@@ -33,6 +33,7 @@ export class LiveAgentSession {
     },
     private readonly cleanup: () => Promise<void> = async () => {},
     private readonly beforeTurn: () => void = () => {},
+    private readonly imageSupport: () => boolean = () => true,
   ) {
     this.unsubscribe = session.subscribe(event => this.event(event));
   }
@@ -54,6 +55,8 @@ export class LiveAgentSession {
       if (event.message.stopReason === "error") capture.providerError = event.message.errorMessage ?? "Provider failed";
     }
   }
+  get supportsImages(): boolean { return this.imageSupport(); }
+
   async prompt(text: string, signal?: AbortSignal, image?: ImageContent): Promise<AgentRunResult> {
     if (this.closed) throw new Error("session_closed: Start a new task");
     if (this.capture) throw new Error("not_idle: A prompt is already running");
@@ -65,7 +68,7 @@ export class LiveAgentSession {
     signal?.addEventListener("abort", abort, { once: true });
     try {
       this.beforeTurn();
-      await this.session.prompt(text, { expandPromptTemplates: process.platform !== "darwin", ...(image ? { images: [image] } : {}) });
+      await this.session.prompt(text, { expandPromptTemplates: process.platform !== "darwin", ...(image && this.supportsImages ? { images: [image] } : {}) });
       if (signal?.aborted) throw abortError(signal);
       this.lifetime.signal.throwIfAborted();
       if (this.closed) throw new Error("session_closed: Reader was closed");

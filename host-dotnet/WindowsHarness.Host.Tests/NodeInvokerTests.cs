@@ -63,6 +63,21 @@ public sealed class NodeInvokerTests
     [Theory]
     [InlineData("true", true)]
     [InlineData("false", false)]
+    public async Task ModelCatalogExposesImageSupport(string supported, bool expected)
+    {
+        using var handler = new FixtureHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent($"{{\"models\":[{{\"provider\":\"fixture\",\"id\":\"model\",\"name\":\"Fixture\",\"reasoning\":false,\"thinkingLevels\":[\"off\"],\"supportsImages\":{supported}}}],\"current\":null}}", Encoding.UTF8, "application/json"),
+        }));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://fixture.invalid") };
+        var catalog = await new NodeInvoker("fixture-token", client).GetModelsAsync();
+        Assert.NotNull(catalog);
+        Assert.Equal(expected, Assert.Single(catalog.Models).SupportsImages);
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
     [InlineData("null", false)]
     public async Task TerminalStatusReportsWhetherFollowupAuthoritySurvives(string available, bool expected)
     {

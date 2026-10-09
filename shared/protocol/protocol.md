@@ -295,7 +295,8 @@ Entry point for a hotkey submission. Request:
 - `contextId`: references the pinned snapshot stored in the C# host.
 - `includeScreenshot?: boolean`: defaults to true. Set false to omit the image
   from the initial prompt only. Local capture, text context, and later screenshot
-  tools remain unchanged. Follow-ups do not automatically attach the pinned image.
+  tools remain unchanged for image-capable models. Text-only models cannot receive
+  screenshot attachments. Follow-ups do not automatically attach the pinned image.
 - `retainSession?: boolean`: explicit opt-in to an in-memory conversational thread.
   Both native reader hosts send true; omission/false requests a one-shot lifecycle. At most 20 threads are retained, with a fixed 30-minute lazy TTL (409
   `thread_limit` before accepting a new retained invocation at capacity).
@@ -401,6 +402,7 @@ listed (`ModelRuntime.getAvailable()`), sorted provider then id:
       "id": "gpt-5.2",
       "name": "GPT-5.2",
       "reasoning": true,
+      "supportsImages": true,
       "thinkingLevels": ["off", "low", "medium", "high", "xhigh"]
     }
   ],
@@ -408,6 +410,10 @@ listed (`ModelRuntime.getAvailable()`), sorted provider then id:
 }
 ```
 
+- `supportsImages`: true when the model declares image input in pi metadata.
+  This is not a live provider test. Text-only active models receive no initial
+  screenshot attachment; `desktop_capture_window` refuses incompatible image
+  output. Runtime checks use the actual session model, including automatic fallback.
 - `thinkingLevels`: pi thinking levels this exact model accepts, ascending;
   non-reasoning models report `["off"]` only. Derived via pi-ai's
   `getSupportedThinkingLevels` (`thinkingLevelMap` null entries excluded).

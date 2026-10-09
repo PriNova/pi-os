@@ -69,8 +69,13 @@ refreshing the installed application.
 4. The persistent reader shows the answer and accepts sequential follow-ups. Logs omit prompt/snapshot contents.
 
 A pi session receives the context summary and, by default, a screenshot. The
-Windows switch controls only the initial attachment: local capture and later
-agent screenshot tools remain enabled. Each new prompt starts with the switch on.
+Windows switch controls only the initial attachment: local capture stays enabled,
+and later screenshot tools remain available for image-capable models. Each new
+prompt starts with the switch on if the selected model supports image input.
+Text-only models have the switch disabled. If model support cannot be determined
+(including an unsaved automatic model choice), the switch stays off until an
+image-capable model is selected in Settings. The active session model is checked
+again before image attachments are sent.
 It can observe the
 captured window and use `desktop_act` to focus, click, type, press supported
 keys or shortcuts, and scroll. Safe action traces are written to
@@ -80,7 +85,9 @@ authentication through `pi /login` or a provider API key.
 ### Choosing the model
 
 Right-click the tray icon → **Settings…** to pick the agent model and its
-reasoning effort. The list shows models with configured authentication, and
+reasoning effort. Settings also shows whether the selected model supports image
+input, based on pi model metadata. Image-capable models have an **IMG** badge in
+the model dropdown. The list shows models with configured authentication, and
 effort options adapt to the selected model. The choice persists in
 `%LOCALAPPDATA%\pi-os\settings.json`; every new hotkey invocation uses it
 (a running task keeps its own model), both switches are logged to

@@ -16,7 +16,8 @@ public sealed record InvocationStatus(string State, string? Activity, string? Re
 
 /// <summary>One model entry of the harness catalog (protocol.md GET /models).</summary>
 public sealed record ModelInfo(
-    string Provider, string Id, string Name, bool Reasoning, IReadOnlyList<string> ThinkingLevels);
+    string Provider, string Id, string Name, bool Reasoning, IReadOnlyList<string> ThinkingLevels,
+    bool SupportsImages = false);
 
 /// <summary>Currently stored model preference; null when pi picks its default.</summary>
 public sealed record ModelSelectionStatus(string Provider, string ModelId, string ThinkingLevel);

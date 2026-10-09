@@ -68,7 +68,7 @@
                          BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"/>
                 <DockPanel Margin="2,6,0,0">
                     <ToggleButton x:Name="ScreenshotToggle" DockPanel.Dock="Right" IsChecked="True"
-                                  Padding="8,3" FontSize="10.5" Cursor="Hand"
+                                  Padding="8,3" FontSize="10.5" Cursor="Hand" ToolTipService.ShowOnDisabled="True"
                                   ToolTip="Include the screenshot with the initial prompt only. Local capture and later screenshot tools stay enabled.">
                         <ToggleButton.Style>
                             <Style TargetType="ToggleButton">
@@ -99,6 +99,9 @@
                                                 </Trigger>
                                                 <Trigger Property="IsPressed" Value="True">
                                                     <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.8"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.5"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>

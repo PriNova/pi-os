@@ -36,6 +36,10 @@ test("model/resource Settings APIs round-trip against injected catalog with no p
     assert.equal((await fetch(base + "/settings/resources")).status, 401);
     const catalog = await (await fetch(base + "/models", { headers })).json() as any;
     assert.equal(catalog.models[0].id, model.id);
+    assert.equal(catalog.models[0].supportsImages, true);
+    model.input = ["text"];
+    const textCatalog = await (await fetch(base + "/models", { headers })).json() as any;
+    assert.equal(textCatalog.models[0].supportsImages, false);
     const selection = { provider: model.provider, modelId: model.id, thinkingLevel: getSupportedThinkingLevels(model)[0] };
     assert.equal((await post("/settings/model", selection)).status, 200);
     assert.deepEqual(new AgentModelSettings(join(dir, "settings.json"), () => {}).get(), selection);

@@ -31,7 +31,7 @@ class FixtureSession implements SessionTransport {
   pause() { this.hold = new Promise(resolve => { this.release = resolve; }); }
 }
 const snapshot = { id: "ctx-pinned", capturedAt: "fixture", targetWindow: null, foregroundWindow: null, windowUnderCursor: null, cursor: { x: 0, y: 0 }, monitors: [] };
-async function fixture(timeout = 0, startup?: Promise<void>, pinned: DesktopContextSnapshot = snapshot) {
+async function fixture(timeout = 0, startup?: Promise<void>, pinned: DesktopContextSnapshot = snapshot, supportsImages = true) {
   const transports: FixtureSession[] = [];
   let unavailable = false, control = true, now = Date.now();
   const host = {
@@ -43,7 +43,7 @@ async function fixture(timeout = 0, startup?: Promise<void>, pinned: DesktopCont
     createSession: async options => {
       if (startup) await startup;
       const session = new FixtureSession(); transports.push(session);
-      return new LiveAgentSession(session, new AbortController(), options);
+      return new LiveAgentSession(session, new AbortController(), options, undefined, undefined, () => supportsImages);
     },
   });
   const base = `http://127.0.0.1:${await server.listen()}`;
@@ -107,6 +107,20 @@ test("initial screenshot attachment defaults on, respects the switch, and does n
       assert.equal(transport.images[1], undefined);
     } finally { await f.server.close(); }
   }
+});
+
+test("text-only active models omit incompatible attachments even when requested", async () => {
+  const pinned = { ...snapshot, screenshot: { kind: "window", filePath: "missing-image-must-not-be-read.png" } };
+  const f = await fixture(0, undefined, pinned, false);
+  try {
+    assert.equal((await f.request("/invoke", { ...invoke, includeScreenshot: true })).status, 202);
+    assert.equal((await f.terminal()).state, "completed");
+    assert.equal(f.transports[0]!.images[0], undefined);
+    assert.match(f.transports[0]!.history[0]!, /active model does not support image input/);
+    await f.request("/invocations/thread/followup", { prompt: "continue" });
+    assert.equal((await f.terminal()).state, "completed");
+    assert.equal(f.transports[0]!.images[1], undefined);
+  } finally { await f.server.close(); }
 });
 
 test("invalid screenshot attachment flags are rejected", async () => {

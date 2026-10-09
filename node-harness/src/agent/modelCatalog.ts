@@ -17,6 +17,8 @@ export interface ModelSummary {
   name: string;
   /** Whether the provider/model supports reasoning (thinking) at all. */
   reasoning: boolean;
+  /** Declared image-input capability; no live provider probe. */
+  supportsImages: boolean;
   /** pi thinking levels this model accepts, ascending ("off" ... "max"). */
   thinkingLevels: string[];
 }
@@ -51,6 +53,7 @@ export function summarizeModel(model: Model<any>): ModelSummary {
     id: model.id,
     name: model.name,
     reasoning: Boolean(model.reasoning),
+    supportsImages: model.input.includes("image"),
     thinkingLevels: [...getSupportedThinkingLevels(model)],
   };
 }

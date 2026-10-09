@@ -149,12 +149,20 @@ public partial class OverlayWindow : Window
 
     public bool IncludeScreenshot => ScreenshotToggle.IsChecked == true;
 
-    public static OverlayWindow ShowFor(Contracts.DesktopContextSnapshot snapshot)
+    public static OverlayWindow ShowFor(Contracts.DesktopContextSnapshot snapshot, bool? supportsImages)
     {
         _ = snapshot.TargetWindow
             ?? throw new InvalidOperationException("Snapshot has no target window.");
 
         var overlay = new OverlayWindow(snapshot);
+        overlay.ScreenshotToggle.IsEnabled = supportsImages == true;
+        overlay.ScreenshotToggle.IsChecked = supportsImages == true;
+        if (supportsImages != true)
+        {
+            overlay.ScreenshotToggle.ToolTip = supportsImages == false
+                ? "The selected model does not support image input. Screenshot attachments are disabled."
+                : "Image support is unknown. Select an image-capable model in Settings to enable screenshot attachments.";
+        }
         overlay.RevealInPlace();
         return overlay;
     }

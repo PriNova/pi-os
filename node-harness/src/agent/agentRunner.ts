@@ -165,6 +165,7 @@ export async function createLiveSession(options: AgentRunOptions): Promise<LiveA
   try { created = await createAgentSession(sessionOptions); }
   catch (error) { disposeProviderBootstrap?.(); throw error; }
   const { session } = created;
+  extension.setImageSupport(session.model?.input.includes("image") === true);
   log(
     `[agent] model=${session.model ? `${session.model.provider}/${session.model.id}` : "default"}` +
     ` effort=${session.thinkingLevel}`,
@@ -174,9 +175,10 @@ export async function createLiveSession(options: AgentRunOptions): Promise<LiveA
   return new LiveAgentSession(session, lifetime, { log, onToolCall, onActivity }, async () => {
     try { await browser?.dispose(); } finally { disposeProviderBootstrap?.(); }
   }, () => {
+    extension.setImageSupport(session.model?.input.includes("image") === true);
     if (!first) { extension.invalidateScreenshot(); browser?.invalidateReferences(); }
     first = false;
-  });
+  }, () => session.model?.input.includes("image") === true);
 }
 
 export async function promptFirst(live: LiveAgentSession, options: AgentRunOptions): Promise<AgentRunResult> {
@@ -185,7 +187,9 @@ export async function promptFirst(live: LiveAgentSession, options: AgentRunOptio
   const userMessage = [
     "## Desktop context (target identity pinned before the prompt appeared)",
     summarizeSnapshot(snapshot),
-    ...(options.includeScreenshot === false ? ["The user disabled the initial screenshot attachment. No image is attached; screenshot tools remain available if needed."] : []),
+    ...(!live.supportsImages
+      ? ["The active model does not support image input. Screenshot attachments are disabled; use text context instead."]
+      : options.includeScreenshot === false ? ["The user disabled the initial screenshot attachment. No image is attached; screenshot tools remain available if needed."] : []),
     "",
     ...(!isolated && process.platform === "darwin" ? ["## Trusted pi compatibility", TRUST_WARNING,
       "Desktop tool refusals must not be bypassed through another input path.", ""] : []),
@@ -194,7 +198,7 @@ export async function promptFirst(live: LiveAgentSession, options: AgentRunOptio
   ].join("\n");
 
   if (signal?.aborted) throw abortError(signal);
-  const image = options.includeScreenshot !== false && snapshot.screenshot?.filePath
+  const image = live.supportsImages && options.includeScreenshot !== false && snapshot.screenshot?.filePath
     ? await loadScreenshotImage(snapshot.screenshot.filePath, capturesDir) : undefined;
   return live.prompt(userMessage, signal, image);
 }

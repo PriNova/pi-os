@@ -104,7 +104,10 @@ public partial class App : Application
 
             // Show the overlay only AFTER the snapshot is pinned.
             Log.Info("Showing prompt overlay");
-            var overlay = OverlayWindow.ShowFor(snapshot);
+            var catalog = _nodeInvoker is null ? null : await _nodeInvoker.GetModelsAsync();
+            var selectedModel = catalog?.Models.FirstOrDefault(model =>
+                model.Provider == catalog.Current?.Provider && model.Id == catalog.Current?.ModelId);
+            var overlay = OverlayWindow.ShowFor(snapshot, selectedModel?.SupportsImages);
             var submitTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             var closedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             overlay.PromptSubmitted += text => submitTcs.TrySetResult(text);

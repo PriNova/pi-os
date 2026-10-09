@@ -77,6 +77,20 @@ test("host domain errors become failed tool executions", async () => {
   await assert.rejects(execute(tools.get("desktop_act"), { action: "focus" }), /policy_blocked: blocked/);
 });
 
+test("text-only model capture refuses image attachments before calling the host", async () => {
+  let calls = 0;
+  const tools = new Map<string, any>();
+  const extension = createComputerUseExtension("ctx-fixed", {
+    invokeTool: async () => { calls++; return { ok: true, result: {} }; },
+  } as unknown as HostClient, "C:/captures");
+  extension.factory({ on() {}, registerTool: (tool: any) => tools.set(tool.name, tool) } as unknown as ExtensionAPI);
+  extension.setImageSupport(false);
+  await assert.rejects(execute(tools.get("desktop_capture_window"), {}), /image_input_unsupported/);
+  assert.equal(calls, 0);
+  await execute(tools.get("desktop_get_context"), {});
+  assert.equal(calls, 1, "Text context stays available");
+});
+
 test("fresh capture returns image only and propagates cancellation", async () => {
   const root = join(process.cwd(), "test", ".tmp-captures");
   await mkdir(root, { recursive: true });
