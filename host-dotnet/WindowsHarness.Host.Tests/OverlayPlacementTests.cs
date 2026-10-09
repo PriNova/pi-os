@@ -70,6 +70,51 @@ public sealed class OverlayPlacementTests
             LaptopMonitor.WorkArea.Y + LaptopMonitor.WorkArea.Height);
     }
 
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.25)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void GrowingPromptKeepsBottomFixedAndMovesTopUp(double scale)
+    {
+        var anchor = new Rect { X = 200, Y = 100, Width = 1200, Height = 800 };
+        var shortHeight = 100 * scale;
+        var tallHeight = 240 * scale;
+        var shortPosition = OverlayWindow.CalculatePhysicalPosition(
+            anchor, ExternalMonitor.WorkArea, 520 * scale, shortHeight, 24 * scale);
+        var tallPosition = OverlayWindow.CalculatePhysicalPosition(
+            anchor, ExternalMonitor.WorkArea, 520 * scale, tallHeight, 24 * scale);
+
+        Assert.Equal(shortPosition.Left, tallPosition.Left);
+        Assert.Equal(shortPosition.Top + shortHeight, tallPosition.Top + tallHeight);
+        Assert.True(tallPosition.Top < shortPosition.Top);
+    }
+
+    [Fact]
+    public void GrowingPromptKeepsBottomFixedWhenTaskbarClamped()
+    {
+        var shortPosition = OverlayWindow.CalculatePhysicalPosition(
+            LaptopMonitor.Bounds, LaptopMonitor.WorkArea, 520, 100, 24);
+        var tallPosition = OverlayWindow.CalculatePhysicalPosition(
+            LaptopMonitor.Bounds, LaptopMonitor.WorkArea, 520, 300, 24);
+
+        Assert.Equal(1040, shortPosition.Top + 100);
+        Assert.Equal(1040, tallPosition.Top + 300);
+    }
+
+    [Fact]
+    public void GrowingPromptClampsToTopWhenUpwardSpaceRunsOut()
+    {
+        var anchor = new Rect { X = 100, Y = 0, Width = 800, Height = 200 };
+        var shortPosition = OverlayWindow.CalculatePhysicalPosition(
+            anchor, ExternalMonitor.WorkArea, 520, 100, 24);
+        var tallPosition = OverlayWindow.CalculatePhysicalPosition(
+            anchor, ExternalMonitor.WorkArea, 520, 300, 24);
+
+        Assert.Equal(76, shortPosition.Top);
+        Assert.Equal(0, tallPosition.Top);
+    }
+
     [Fact]
     public void PhysicalWindowRespectsTaskbarOnLeftEdge()
     {

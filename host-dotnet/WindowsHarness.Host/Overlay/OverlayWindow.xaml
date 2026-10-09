@@ -64,6 +64,8 @@
                 <TextBlock x:Name="TargetLabel" Foreground="#FF9E9E9E" FontSize="11"
                            Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
                 <TextBox x:Name="PromptBox" FontSize="15" Padding="6"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" MaxHeight="200"
                          Background="#FF111111" Foreground="#FFEAEAEA"
                          BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"/>
                 <DockPanel Margin="2,6,0,0">
@@ -117,7 +119,7 @@
                         </ToggleButton.Style>
                     </ToggleButton>
                     <TextBlock Foreground="#FF707070" FontSize="10.5" VerticalAlignment="Center"
-                               Text="Enter: submit&#160;&#160;&#160;Esc: cancel"/>
+                               Text="Enter: submit &#183; Shift+Enter: new line &#183; Esc: cancel"/>
                 </DockPanel>
             </StackPanel>
         </Border>
@@ -201,12 +203,12 @@
                     <TextBlock x:Name="ReaderTitle" Foreground="#FF9E9E9E" FontSize="11"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                 </DockPanel>
-                <TextBox x:Name="AnswerBox" IsReadOnly="True" TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" MaxHeight="300"
-                         FontSize="13" Padding="6"
-                         Background="#FF111111" Foreground="#FFEAEAEA"
-                         BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
-                         KeyDown="OnReaderKeyDown"/>
+                <RichTextBox x:Name="AnswerBox" IsReadOnly="True" IsDocumentEnabled="True"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             MaxHeight="300" FontSize="13" Padding="6"
+                             Background="#FF111111" Foreground="#FFEAEAEA"
+                             BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"
+                             PreviewKeyDown="OnReaderKeyDown"/>
                 <TextBox x:Name="FollowupBox" FontSize="13" Padding="6" Margin="0,8,0,0"
                          Background="#FF111111" Foreground="#FFEAEAEA"
                          BorderBrush="#FF3D3D3D" CaretBrush="#FFEAEAEA"

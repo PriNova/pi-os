@@ -124,10 +124,17 @@ in the tray settings page).
 - Captures the active window, screenshot, focused UI element, and monitor
   information before showing the prompt.
 - Uses a pi agent to inspect and interact with the captured window.
+- Accepts multiline Windows prompts: Enter submits, Shift+Enter inserts a line
+  break, and long text wraps and scrolls. The prompt grows upward while keeping
+  its bottom anchored, unless the screen's top edge prevents it. The server allows
+  up to 20,000 characters.
 - Supports focusing, clicking, typing, key presses, keyboard shortcuts, and
   scrolling.
 - Provides model and reasoning-effort settings from the tray menu.
 - Supports cancellation, request timeouts, and live task status.
+- Displays Windows replies as selectable Markdown with headings, lists, code,
+  quotes, and tables. The clipboard keeps the original Markdown. HTML stays
+  literal, images show alt text only, and web links open only on user activation.
 - Blocks computer input in protected applications such as password managers
   and elevated windows.
 

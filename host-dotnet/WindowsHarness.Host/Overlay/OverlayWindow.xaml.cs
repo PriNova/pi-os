@@ -138,6 +138,17 @@ public partial class OverlayWindow : Window
 
         _hwnd = (HWND)new WindowInteropHelper(this).EnsureHandle();
 
+        // SizeToContent changes height when multiline prompts grow or shrink.
+        // Re-anchor after native layout has settled so the bottom stays fixed.
+        SizeChanged += (_, _) => Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (IsVisible && !_closeRequested)
+                {
+                    ApplyPhysicalPosition();
+                }
+            }));
+
         // Moving between mixed-DPI monitors can finish after the first native
         // position call. Re-anchor once WPF has accepted the new monitor DPI.
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(
@@ -292,7 +303,7 @@ public partial class OverlayWindow : Window
         ReaderHint.Text = "copied to clipboard · Esc or ✕ to close";
         if (!_pillMode)
         {
-            SwitchToReader("pi-os — failed", message);
+            SwitchToReader("pi-os — failed", message, markdown: false);
             DisableFollowup("follow-up unavailable after failure");
             return;
         }
@@ -300,7 +311,7 @@ public partial class OverlayWindow : Window
         BeginTerminal("failed", PillState.Failed);
         BeginTerminalFlash(() =>
         {
-            SwitchToReader("pi-os — failed", message);
+            SwitchToReader("pi-os — failed", message, markdown: false);
             DisableFollowup("follow-up unavailable after failure");
         });
     }
@@ -402,12 +413,13 @@ public partial class OverlayWindow : Window
 
     private string _lastReaderTitle = "pi-os";
     private string _lastReaderText = string.Empty;
+    private bool _lastReaderIsMarkdown = true;
 
     /// <summary>Back to the reader with the previous answer after a failed
     /// follow-up, so the user can retry. The answer box is untouched.</summary>
     public void ReenterReaderAfterFailedFollowup(string hint, bool followupAvailable = true)
     {
-        SwitchToReader(_lastReaderTitle, _lastReaderText);
+        SwitchToReader(_lastReaderTitle, _lastReaderText, _lastReaderIsMarkdown);
         SetFollowupAvailability(followupAvailable);
         FollowupHint.Text = hint;
     }
@@ -432,7 +444,7 @@ public partial class OverlayWindow : Window
         }
     }
 
-    private void SwitchToReader(string title, string text)
+    private void SwitchToReader(string title, string text, bool markdown = true)
     {
         _pillMode = false;
         StopClearTimer();
@@ -451,10 +463,12 @@ public partial class OverlayWindow : Window
         Width = 520;
 
         ReaderTitle.Text = title;
-        AnswerBox.Text = text;
+        AnswerBox.Document = MarkdownDocumentRenderer.Render(text, markdown);
         AnswerBox.SelectAll();
+        AnswerBox.ScrollToHome();
         _lastReaderTitle = title;
         _lastReaderText = text;
+        _lastReaderIsMarkdown = markdown;
 
         UpdateLayout();
         ApplyPhysicalPosition();
@@ -466,6 +480,11 @@ public partial class OverlayWindow : Window
 
     private void OnPromptKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+        {
+            return; // Let the multiline TextBox insert a line break.
+        }
+
         if (e.Key == Key.Enter)
         {
             SubmittedPrompt = PromptBox.Text.Trim();
