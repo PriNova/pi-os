@@ -15,7 +15,13 @@ namespace WindowsHarness.Host.Settings;
 /// </summary>
 public partial class SettingsWindow : Window
 {
+    /// <summary>How long the settings page waits for a cold-started harness
+    /// before surfacing the terminal "unreachable" error.</summary>
+    private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(800);
+
     private readonly NodeInvoker _invoker;
+    private readonly CancellationTokenSource _loadCts = new();
     private IReadOnlyList<ModelInfo> _models = [];
     private ModelSelectionStatus? _current;
     /// <summary>True while combos are populated programmatically.</summary>
@@ -25,28 +31,72 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         _invoker = invoker;
+        Closed += (_, _) => _loadCts.Cancel();
         Loaded += (_, _) => _ = LoadAsync();
     }
 
+    /// <summary>Waits for a cold-started harness (indeterminate progress +
+    /// silent health-poll retries), then prefills provider/model/effort.
+    /// Empty catalogs and permanent errors are terminal; temporary failures
+    /// retry until <see cref="StartupTimeout"/>. Cancel closes silently.</summary>
     private async Task LoadAsync()
     {
-        Status("Loading models from the agent harness…");
-        SaveButton.IsEnabled = false;
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_loadCts.Token);
+        timeoutCts.CancelAfter(StartupTimeout);
+        var ct = timeoutCts.Token;
+        SetLoading(true);
+        Status("Waiting for the agent harness to start…");
 
-        var catalog = await _invoker.GetModelsAsync();
-        if (catalog is null)
+        try
         {
-            Status("Could not reach the agent harness (port 17832). "
-                + "Make sure pi-os is running, then reopen settings.", error: true);
-            return;
-        }
-        if (catalog.Models.Count == 0)
-        {
-            Status("No models available. Configure provider authentication first "
-                + "(pi /login or a provider API key), then reopen settings.", error: true);
-            return;
-        }
+            // Phase 1: cheap readiness probe. Avoids hammering
+            // ModelRuntime.create() while node is not even listening yet.
+            while (!await _invoker.CheckHealthAsync(ct))
+            {
+                Status("Waiting for the agent harness to start…");
+                await Task.Delay(RetryDelay, ct);
+            }
 
+            Status("Loading models from the agent harness…");
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                var result = await _invoker.GetModelCatalogAsync(ct);
+                ct.ThrowIfCancellationRequested();
+                var catalog = result.Catalog;
+                if (catalog is not null)
+                {
+                    if (catalog.Models.Count == 0)
+                    {
+                        Fail("No models available. Configure provider authentication first "
+                            + "(pi /login or a provider API key), then reopen settings.");
+                        return;
+                    }
+                    PopulateFromCatalog(catalog);
+                    return;
+                }
+                if (!result.CanRetry)
+                {
+                    Fail(result.Error ?? "Could not load the model catalog.");
+                    return;
+                }
+                Status("Waiting for the agent harness to start…");
+                await Task.Delay(RetryDelay, ct);
+            }
+        }
+        catch (OperationCanceledException) when (_loadCts.IsCancellationRequested)
+        {
+            // Window closed mid-load: nothing to report.
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            Fail("The agent harness did not finish loading models within 60 seconds. "
+                + "Make sure pi-os is running, then reopen settings.");
+        }
+    }
+
+    private void PopulateFromCatalog(ModelCatalog catalog)
+    {
         _models = catalog.Models;
         _current = catalog.Current;
 
@@ -63,8 +113,33 @@ public partial class SettingsWindow : Window
         // combos directly (provider -> models -> efforts).
         PopulateModels();
 
+        SetLoading(false);
+        ProviderBox.IsEnabled = true;
+        ModelBox.IsEnabled = true;
+        EffortBox.IsEnabled = true;
         Status($"{_models.Count} models with configured authentication.");
         SaveButton.IsEnabled = true;
+    }
+
+    /// <summary>Terminal failure: hide the spinner, keep combos disabled.</summary>
+    private void Fail(string message)
+    {
+        SetLoading(false);
+        Status(message, error: true);
+    }
+
+    private void SetLoading(bool loading)
+    {
+        LoadingBar.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        if (loading)
+        {
+            ProviderBox.IsEnabled = false;
+            ModelBox.IsEnabled = false;
+            EffortBox.IsEnabled = false;
+            SaveButton.IsEnabled = false;
+        }
+        // loading=false only hides the spinner; the caller enables
+        // combos + Save on success, or leaves them disabled on failure.
     }
 
     private void OnProviderChanged(object sender, SelectionChangedEventArgs e)

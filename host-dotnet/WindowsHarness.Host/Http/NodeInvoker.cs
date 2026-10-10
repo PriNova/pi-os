@@ -25,6 +25,9 @@ public sealed record ModelSelectionStatus(string Provider, string ModelId, strin
 /// <summary>GET /models response.</summary>
 public sealed record ModelCatalog(IReadOnlyList<ModelInfo> Models, ModelSelectionStatus? Current);
 
+/// <summary>A catalog response or a failure with its retry classification.</summary>
+public sealed record ModelCatalogResult(ModelCatalog? Catalog, string? Error = null, bool CanRetry = false);
+
 /// <summary>
 /// Sends hotkey invocations to the local TypeScript agent harness
 /// (protocol.md: POST /invoke on the node service), then polls the
@@ -103,25 +106,82 @@ public sealed class NodeInvoker
 
     /// <summary>Fetches the pi model catalog for the settings page.
     /// Returns null on transport/protocol failure (reason is logged).</summary>
-    public async Task<ModelCatalog?> GetModelsAsync()
+    public async Task<ModelCatalog?> GetModelsAsync(CancellationToken cancellationToken = default)
+        => (await GetModelCatalogAsync(cancellationToken)).Catalog;
+
+    /// <summary>Fetches the catalog and distinguishes temporary startup failures
+    /// from authentication or protocol errors. Caller cancellation propagates.</summary>
+    public async Task<ModelCatalogResult> GetModelCatalogAsync(CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/models");
         AddToken(request);
         try
         {
-            using var response = await _client.SendAsync(request);
+            using var response = await _client.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                Log.Warn($"Model catalog rejected: HTTP {(int)response.StatusCode}");
-                return null;
+                var code = (int)response.StatusCode;
+                Log.Warn($"Model catalog rejected: HTTP {code}");
+                var error = code is 401 or 403
+                    ? "The agent harness rejected authentication. Restart pi-os to renew its connection."
+                    : $"The agent harness rejected the model catalog request (HTTP {code}).";
+                return new(null, error, CanRetry: code >= 500 || code is 408 or 429);
             }
-            await using var stream = await response.Content.ReadAsStreamAsync();
-            return await JsonSerializer.DeserializeAsync<ModelCatalog>(stream, ContractsJson.Options);
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var catalog = await JsonSerializer.DeserializeAsync<ModelCatalog>(stream, ContractsJson.Options, cancellationToken);
+            if (catalog?.Models is null)
+            {
+                return new(null, "The agent harness returned an invalid model catalog.");
+            }
+            return new(catalog);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Per-attempt timeout (HttpClient timeout): retryable, not a window-close.
+            Log.Warn("Model catalog request timed out; harness may still be bootstrapping.");
+            return new(null, "The model catalog request timed out.", CanRetry: true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException ex)
+        {
+            Log.Warn($"Invalid model catalog: {ex.Message}");
+            return new(null, "The agent harness returned an invalid model catalog.");
         }
         catch (Exception ex)
         {
             Log.Error($"Failed to fetch model catalog from {_client.BaseAddress}: {ex.Message}");
-            return null;
+            return new(null, "Could not fetch the model catalog.", CanRetry: ex is HttpRequestException or IOException);
+        }
+    }
+
+    /// <summary>Cheap readiness probe (GET /health, no auth required).
+    /// Returns false when the harness is not listening yet; true once it
+    /// answers. Silent on failure so the settings-page retry loop stays quiet.
+    /// Throws <see cref="OperationCanceledException"/> only when
+    /// <paramref name="cancellationToken"/> is cancelled (deadline or window closed).</summary>
+    public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+        AddToken(request);
+        try
+        {
+            using var response = await _client.SendAsync(request, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
