@@ -13,7 +13,7 @@ export interface HarnessConfig {
    *  Default ON since 2026-08-24 (product decision): slice mode only helps
    *  headless smoke tests. Opt out with PI_OS_AGENT=0 or =false. */
   agentEnabled: boolean;
-  /** Max wall-clock time per invocation in ms (PI_OS_INVOKE_TIMEOUT_MS). 0 disables. Default: 5 min. */
+  /** Max wall-clock time per invocation in ms (PI_OS_INVOKE_TIMEOUT_MS). 0 disables (default). */
   invokeTimeoutMs: number;
   /** Trusted directory where the C# host writes screenshots. */
   capturesDir: string;
@@ -38,7 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): HarnessConfig 
 
 function parseTimeoutMs(raw: string | undefined): number {
   const value = Number.parseInt(raw ?? "0", 10);
-  return Number.isFinite(value) && value >= 0 ? value : 300_000;
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 /** Unset -> true (agent mode is the product); explicit 0/false -> slice mode. */

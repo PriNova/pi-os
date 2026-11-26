@@ -106,7 +106,7 @@ values.
 | `PI_OS_NODE_URL` | Changes the Node harness address used by the C# host (default `http://127.0.0.1:17832`). |
 | `PI_OS_SUPERVISOR` | Set to `0` to prevent the C# host from starting the Node harness. Use this for the split workflow. |
 | `PI_OS_NODE_ENTRY` | Overrides the Node entry file started by the supervisor. The default resolver finds `node-harness/dist/index.js`. |
-| `PI_OS_INVOKE_TIMEOUT_MS` | Sets the maximum request time in milliseconds (default `300000`; `0` disables the timeout). |
+| `PI_OS_INVOKE_TIMEOUT_MS` | Sets the maximum request time in milliseconds (default `0`, no timeout; set a positive value to enable). |
 | `PI_OS_TYPE_INTERVAL_MS` | Sets the delay between typed characters in milliseconds (default `20`; `0` disables pacing). |
 | `PI_OS_CAPTURES_DIR` | Changes the shared screenshot directory (default `%LOCALAPPDATA%\pi-os\captures`). Both processes must use the same directory. |
 

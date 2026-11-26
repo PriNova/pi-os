@@ -101,7 +101,7 @@ change user-visible behavior:
 | Variable | Meaning |
 |----------|---------|
 | `PI_OS_HOTKEY` | Hotkey override, e.g. `Ctrl+Shift+F9` (default `Ctrl+Alt+Space`) |
-| `PI_OS_INVOKE_TIMEOUT_MS` | Maximum time for each request in milliseconds (default `300000`; `0` disables the timeout) |
+| `PI_OS_INVOKE_TIMEOUT_MS` | Maximum time for each request in milliseconds (default `0`, no timeout; set a positive value to enable) |
 
 Other `PI_OS_*` variables are development and test controls documented in
 [`DEVELOPMENT.md`](DEVELOPMENT.md).

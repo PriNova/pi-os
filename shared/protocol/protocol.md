@@ -349,8 +349,8 @@ Requests cancellation of a running invocation (A.3):
   in flight (already finished, failed, or cancelled).
 - `404 {"error":{"code":"not_found"}}` — unknown invocation id.
 
-Each invocation also has a wall-clock timeout (`PI_OS_INVOKE_TIMEOUT_MS`,
-default 300000, `0` disables). A timed-out invocation ends in state
+Each invocation also supports an optional wall-clock timeout (`PI_OS_INVOKE_TIMEOUT_MS`,
+default `0`, disabled). A timed-out invocation ends in state
 `timed_out`; both terminal paths record a `cancel` / `timeout` step.
 
 #### `POST /invocations/{invocationId}/followup`

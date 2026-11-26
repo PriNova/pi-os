@@ -64,12 +64,15 @@ internal sealed class NodeSupervisor : IDisposable
             WorkingDirectory = Path.GetDirectoryName(entry)!,
             UseShellExecute = false,
             CreateNoWindow = true,
-            // Pipe child logs into the host log: a silent harness is
-            // undiagnosable (e.g. missing node_modules crashes instantly).
+            // Hold stdin open so the supervised Node process can observe parent
+            // death via EOF (index.ts), and pipe stdout/stderr into host.log.
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
         startInfo.Environment["PI_OS_TOKEN"] = Token;
+        startInfo.Environment["PI_OS_SUPERVISED"] = "1";
+        startInfo.Environment.Remove("PI_OS_INSECURE_DEV");
 
         try
         {
